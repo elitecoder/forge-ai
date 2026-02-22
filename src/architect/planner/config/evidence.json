@@ -1,0 +1,21 @@
+{
+  "recon": [
+    {"rule": "file_exists", "file_glob": "codebase-brief.md", "min_lines": 30}
+  ],
+  "architects": [
+    {"rule": "file_exists", "file_glob": "design-a.md", "min_lines": 20},
+    {"rule": "file_exists", "file_glob": "design-b.md", "min_lines": 20}
+  ],
+  "critics": [
+    {"rule": "file_exists", "file_glob": "critique-a.md", "min_lines": 15},
+    {"rule": "file_exists", "file_glob": "critique-b.md", "min_lines": 15}
+  ],
+  "refiners": [
+    {"rule": "file_exists", "file_glob": "refined-a.md", "min_lines": 20},
+    {"rule": "file_exists", "file_glob": "refined-b.md", "min_lines": 20}
+  ],
+  "judge": [
+    {"rule": "file_exists", "file_glob": "final-plan.md", "min_lines": 30},
+    {"rule": "file_contains_heading", "file_glob": "final-plan.md", "headings": ["decision", "implementation"]}
+  ]
+}

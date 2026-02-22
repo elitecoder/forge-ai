@@ -1,0 +1,17 @@
+# Project-specific preset overrides (local only, never committed)
+src/architect/presets/*/local/
+src/architect/presets/*/credentials/
+
+# Standard Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
