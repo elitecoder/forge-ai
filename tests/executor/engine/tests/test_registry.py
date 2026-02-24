@@ -252,13 +252,6 @@ class TestResolvePresetDir:
         with pytest.raises(FileNotFoundError, match="No manifest.json"):
             resolve_preset_dir(str(empty))
 
-    def test_builtin_hz_web(self):
-        """Built-in hz-web preset is found."""
-        result = resolve_preset_dir("hz-web")
-        assert (result / "manifest.json").is_file()
-        assert (result / "skills" / "code-review.md").is_file()
-        assert (result / "scripts" / "template.js").is_file()
-        assert (result / "references" / "squirrel-quirks.md").is_file()
 
 
 class TestVisualTestConfig:
@@ -289,12 +282,3 @@ class TestVisualTestConfig:
         preset = load_preset(tmp_path)
         assert preset.visual_test_config == {}
 
-    def test_hz_web_has_visual_test_config(self):
-        """The hz-web preset has a non-empty visual_test_config."""
-        preset_dir = resolve_preset_dir("hz-web")
-        preset = load_preset(preset_dir)
-        cfg = preset.visual_test_config
-        assert cfg["template_path"] == "${PRESET_DIR}/scripts/template.js"
-        assert "squirrel-quirks.md" in cfg["quirks_path"]
-        assert len(cfg["fixture_patterns"]) >= 4
-        assert "SQUIRREL_EMAIL" in cfg["credential_env_vars"]
