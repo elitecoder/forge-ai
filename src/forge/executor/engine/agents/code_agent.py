@@ -139,8 +139,9 @@ Playwright tests, or integration test files unless the plan explicitly requests 
 
 ## After Implementing
 
-1. Run: `{build_cmd}`
-2. Fix any compilation errors and repeat until the build succeeds.
+1. **Verify mathematical invariants**: If your code computes ratios, durations, or derived values, prove the formula is correct with concrete examples. For each formula, substitute sample values and verify the output matches the expected direction (e.g., "speed up" produces ratio > 1, "slow down" produces ratio < 1). Document this verification as a code comment if the formula is non-obvious.
+2. Run: `{build_cmd}`
+3. Fix any compilation errors and repeat until the build succeeds.
 """
 
 

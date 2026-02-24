@@ -26,7 +26,8 @@ def repo_root() -> str:
 SESSIONS_BASE = _CORE_BASE / "executor"
 
 
-def session_prefix() -> str:
+def current_branch() -> str:
+    """Return the current branch name, or short SHA on detached HEAD."""
     try:
         branch = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -34,6 +35,19 @@ def session_prefix() -> str:
         ).stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return "unknown"
+    if branch == "HEAD":
+        try:
+            return subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True,
+            ).stdout.strip() or "detached"
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return "detached"
+    return branch
+
+
+def session_prefix() -> str:
+    branch = current_branch()
     match = re.search(os.environ.get("FORGE_TICKET_PATTERN", r"[A-Z]+-\d+"), branch)
     return match.group(0) if match else re.sub(r"[/:]", "-", branch)
 

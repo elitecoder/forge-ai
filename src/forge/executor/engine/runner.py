@@ -386,6 +386,22 @@ Step 4 is mandatory. If you do not run it, all your work is discarded.
 """
 
 
+def _load_fix_findings(session_dir: str, step_name: str) -> list[dict]:
+    """Load review findings from checklist JSON for inlining into fix prompt."""
+    checklist_path = Path(session_dir) / f"{step_name}-checklist.json"
+    if checklist_path.is_file():
+        try:
+            data = json.loads(checklist_path.read_text())
+            return [
+                {"id": item["id"], "criteria": item["criteria"]}
+                for item in data.get("checklist", [])
+                if item.get("id") and item.get("criteria")
+            ]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+    return []
+
+
 def _checklist_schema_section(step_name: str, session_dir: str) -> str:
     """Generate the structured checklist output requirement for AI prompts."""
     return f"""
@@ -400,7 +416,7 @@ Before calling pass/fail, write `{session_dir}/{step_name}-checklist.json`:
     {{
       "id": "<matches criteria item>",
       "criteria": "<what was asked>",
-      "status": "done|skipped|blocked",
+      "status": "done|blocked",
       "evidence": "<file:line references proving completion>",
       "files_touched": ["<paths>"]
     }}
@@ -544,9 +560,23 @@ def generate_ai_fix_prompt(step: StepDefinition, state: PipelineState, preset: P
 
     parts = [protocol]
     parts.append("## Task\n")
-    parts.append(f"Read the findings from the previous review phase in "
-                 f"`{state.session_dir}/pipeline-output.md` and fix ALL issues found.")
-    parts.append(f"\nAfter fixing, verify: build and tests still pass.")
+
+    # Inline the specific findings so the agent doesn't have to discover them
+    findings = _load_fix_findings(state.session_dir, step.name)
+    if findings:
+        parts.append("Fix **every** issue listed below. Do NOT skip any item.\n")
+        for i, f in enumerate(findings, 1):
+            parts.append(f"{i}. **{f['id']}**: {f['criteria']}")
+        parts.append(f"\nFull details are in `{state.session_dir}/pipeline-output.md`.")
+    else:
+        parts.append(f"Read the findings from the previous review phase in "
+                     f"`{state.session_dir}/pipeline-output.md` and fix ALL issues found.")
+
+    parts.append(f"\nAfter fixing ALL items, verify: build and tests still pass.")
+    parts.append("\n**IMPORTANT**: Do NOT call pass until every issue above is fixed. "
+                 "An external judge will verify each item against the git diff. "
+                 "If any item is missing from your diff, the judge will reject and "
+                 "you will have to redo all work. Fix everything in one pass.")
     parts.append(f"\n## Context\n")
     parts.append(f"- Repository: `{ctx['REPO_ROOT']}`")
     parts.append(f"- Session directory: `{state.session_dir}`")

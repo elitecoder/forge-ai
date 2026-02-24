@@ -24,7 +24,7 @@ from forge.core.session import (
     list_sessions as _core_list_sessions,
     cleanup_sessions as _core_cleanup_sessions,
 )
-from forge.executor.engine.utils import DEFAULT_DEV_PORT, repo_root, find_active_session, SESSIONS_BASE
+from forge.executor.engine.utils import DEFAULT_DEV_PORT, repo_root, find_active_session, SESSIONS_BASE, current_branch
 
 
 def _now_iso() -> str:
@@ -129,20 +129,11 @@ def _is_worktree() -> tuple[bool, str]:
 
 def _session_name(slug: str = "") -> str:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%SZ")
-    # Always prefer ticket pattern from branch so find_active_session() can
-    # locate the session on --resume and agent pass/fail calls.
-    try:
-        branch = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True,
-        ).stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        branch = "unknown"
+    branch = current_branch()
     ticket_pattern = os.environ.get("FORGE_TICKET_PATTERN", r"[A-Z]+-\d+")
     match = re.search(ticket_pattern, branch)
     if match:
         return f"{match.group(0)}_{ts}"
-    # Always use branch-derived prefix so find_active_session() can locate it
     name = re.sub(r"[/:]", "-", branch)
     return f"{name}_{ts}"
 

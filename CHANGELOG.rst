@@ -1,6 +1,16 @@
 Changelog
 =========
 
+0.7.1 (2026-02-24)
+-------------------
+* **Detached HEAD session naming**: ``_session_name()`` and ``session_prefix()``
+  now fall back to the short SHA when ``git rev-parse --abbrev-ref HEAD``
+  returns literal ``HEAD`` (detached state), preventing broken session
+  directory names and lookup failures.
+* **Formula verification in code agent**: The code step prompt now instructs
+  agents to verify mathematical invariants with concrete examples before
+  running the build, catching formula direction errors earlier.
+
 0.7.0 (2026-02-23)
 -------------------
 * **Structured event logging**: New ``forge.core.events`` module emits
