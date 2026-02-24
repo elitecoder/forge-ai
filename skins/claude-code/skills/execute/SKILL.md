@@ -1,4 +1,4 @@
-# Architect Execute
+# Forge Execute
 
 Deterministic pipeline executor. Takes a plan and runs it through a multi-step
 pipeline: code, build, lint, test, code review, visual test, PR creation.
@@ -7,15 +7,15 @@ pipeline: code, build, lint, test, code review, visual test, PR creation.
 
 ```bash
 # Start a new pipeline
-architect drive --plan final-plan.md --preset hz-web
+forge drive --plan final-plan.md --preset <your-preset>
 
 # Resume an interrupted pipeline
-architect drive --resume
+forge drive --resume
 
 # Pipeline CLI for manual step management
-architect execute init full --preset hz-web --plan plan.md
-architect execute status
-architect execute next
+forge execute init full --preset <your-preset> --plan plan.md
+forge execute status
+forge execute next
 ```
 
 The driver spawns fresh AI agents per step with zero context rot.

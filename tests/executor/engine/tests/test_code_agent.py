@@ -10,31 +10,30 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock, call
 
-from architect.executor.engine.agents.code_agent import (
+from forge.executor.engine.agents.code_agent import (
     generate_prompt,
     run,
     CodeAgentOutcome,
     _has_code_changes,
     _generate_checklist,
+    _verify_build,
 )
-from architect.core.runner import AgentRunner, AgentResult
-from architect.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
-from architect.executor.engine.state import PipelineState, StepState
+from forge.core.runner import AgentRunner, AgentResult
+from forge.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
+from forge.executor.engine.state import PipelineState, StepState
 
 
-def _make_preset(preset_dir=".", pass_command="", bazel_pass_command=""):
+def _make_preset(preset_dir=".", build_command="", bazel_build_command=""):
     return Preset(
         name="test",
         version=3,
         description="Test preset",
         pipelines={"full": PipelineDefinition(steps=["code"], dependencies={})},
-        steps={"code": StepDefinition(
-            name="code", step_type="ai",
-            pass_command=pass_command,
-            bazel_pass_command=bazel_pass_command,
-        )},
+        steps={"code": StepDefinition(name="code", step_type="ai")},
         models={"code": "sonnet", "fix": "sonnet"},
         preset_dir=Path(preset_dir),
+        build_command=build_command,
+        bazel_build_command=bazel_build_command,
     )
 
 
@@ -123,7 +122,7 @@ class TestGeneratePrompt:
 
         assert "apps/webapp/web" in prompt
 
-    @patch("architect.executor.engine.agents.code_agent.is_bazel_repo", return_value=True)
+    @patch("forge.executor.engine.agents.code_agent.is_bazel_repo", return_value=True)
     def test_build_command_uses_packages(self, _mock_bazel):
         plan = os.path.join(self.tmp, "plan.md")
         Path(plan).write_text("Plan")
@@ -134,7 +133,7 @@ class TestGeneratePrompt:
         )
         preset = _make_preset(
             self.tmp,
-            bazel_pass_command="cd {{REPO_ROOT}} && bazel build {{BUILD_TARGETS}}",
+            bazel_build_command="cd {{REPO_ROOT}} && bazel build {{BUILD_TARGETS}}",
         )
 
         prompt = generate_prompt(state, preset)
@@ -142,21 +141,22 @@ class TestGeneratePrompt:
         assert "//apps/webapp/web/..." in prompt
         assert "//libs/common/..." in prompt
 
-    @patch("architect.executor.engine.agents.code_agent.is_bazel_repo", return_value=True)
-    def test_build_command_fallback_when_no_packages(self, _mock_bazel):
+    @patch("forge.executor.engine.agents.code_agent.is_bazel_repo", return_value=True)
+    def test_build_command_skipped_when_no_packages_and_needs_targets(self, _mock_bazel):
         plan = os.path.join(self.tmp, "plan.md")
         Path(plan).write_text("Plan")
         state = _make_state(plan_file=plan, session_dir=self.session_dir, packages=[])
         preset = _make_preset(
             self.tmp,
-            bazel_pass_command="cd {{REPO_ROOT}} && bazel build {{BUILD_TARGETS}}",
+            bazel_build_command="cd {{REPO_ROOT}} && bazel build {{BUILD_TARGETS}}",
         )
 
         prompt = generate_prompt(state, preset)
 
-        assert "bazel build :tsc" in prompt
+        assert "No build targets" in prompt
+        assert "{{BUILD_TARGETS}}" not in prompt
 
-    def test_no_build_command_when_no_pass_command(self):
+    def test_no_build_command_when_no_build_command_configured(self):
         plan = os.path.join(self.tmp, "plan.md")
         Path(plan).write_text("Plan")
         state = _make_state(plan_file=plan, session_dir=self.session_dir)
@@ -186,14 +186,14 @@ class TestGeneratePrompt:
 # -- _has_code_changes --------------------------------------------------------
 
 class TestHasCodeChanges:
-    @patch("architect.executor.engine.agents.code_agent.subprocess.run")
+    @patch("forge.executor.engine.agents.code_agent.subprocess.run")
     def test_tracked_changes_detected(self, mock_run):
         mock_run.side_effect = [
             MagicMock(stdout=" src/index.ts | 5 +++--\n 1 file changed\n"),
         ]
         assert _has_code_changes("/repo") is True
 
-    @patch("architect.executor.engine.agents.code_agent.subprocess.run")
+    @patch("forge.executor.engine.agents.code_agent.subprocess.run")
     def test_untracked_changes_detected(self, mock_run):
         mock_run.side_effect = [
             MagicMock(stdout=""),       # git diff --stat HEAD (nothing)
@@ -201,7 +201,7 @@ class TestHasCodeChanges:
         ]
         assert _has_code_changes("/repo") is True
 
-    @patch("architect.executor.engine.agents.code_agent.subprocess.run")
+    @patch("forge.executor.engine.agents.code_agent.subprocess.run")
     def test_no_changes(self, mock_run):
         mock_run.side_effect = [
             MagicMock(stdout=""),  # git diff --stat HEAD
@@ -212,8 +212,132 @@ class TestHasCodeChanges:
 
 # -- _generate_checklist ------------------------------------------------------
 
+class TestVerifyBuild:
+    def setup_method(self):
+        self.tmp = tempfile.mkdtemp(prefix="verify_build_test_")
+        self.session_dir = os.path.join(self.tmp, "session")
+        os.makedirs(self.session_dir)
+
+    def teardown_method(self):
+        shutil.rmtree(self.tmp)
+
+    @patch("forge.executor.engine.agents.code_agent.is_bazel_repo", return_value=False)
+    @patch("forge.executor.engine.agents.code_agent.subprocess.run")
+    def test_build_succeeds(self, mock_run, _mock_bazel):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        state = _make_state(session_dir=self.session_dir)
+        preset = _make_preset(self.tmp, build_command="npm run build")
+
+        result = _verify_build(state, preset, self.tmp, self.session_dir)
+
+        assert result["passed"] is True
+
+    @patch("forge.executor.engine.agents.code_agent.is_bazel_repo", return_value=False)
+    @patch("forge.executor.engine.agents.code_agent.subprocess.run")
+    def test_build_fails_saves_errors(self, mock_run, _mock_bazel):
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="error TS2304: Cannot find name 'x'\n",
+        )
+        state = _make_state(session_dir=self.session_dir)
+        preset = _make_preset(self.tmp, build_command="npm run build")
+
+        result = _verify_build(state, preset, self.tmp, self.session_dir)
+
+        assert result["passed"] is False
+        assert "Build failed" in result["reason"]
+        # Verify errors saved to file
+        build_errors_path = Path(self.session_dir) / "build-errors.txt"
+        assert build_errors_path.is_file()
+        assert "error TS2304" in build_errors_path.read_text()
+
+    @patch("forge.executor.engine.agents.code_agent.is_bazel_repo", return_value=False)
+    def test_no_build_command_configured(self, _mock_bazel):
+        state = _make_state(session_dir=self.session_dir)
+        preset = _make_preset(self.tmp, build_command="")
+
+        result = _verify_build(state, preset, self.tmp, self.session_dir)
+
+        assert result["passed"] is True
+        assert "No build verification configured" in result["reason"]
+
+    @patch("forge.executor.engine.agents.code_agent.is_bazel_repo", return_value=True)
+    def test_no_packages_no_changes_and_template_needs_targets(self, _mock_bazel):
+        """No packages in state, no code changes on disk — pass (nothing to verify)."""
+        state = _make_state(session_dir=self.session_dir, packages=[])
+        preset = _make_preset(
+            self.tmp,
+            bazel_build_command="bazel build {{BUILD_TARGETS}}",
+        )
+
+        result = _verify_build(state, preset, self.tmp, self.session_dir)
+
+        assert result["passed"] is True
+        assert "No code changes" in result["reason"]
+
+    @patch("forge.executor.engine.agents.code_agent.is_bazel_repo", return_value=True)
+    @patch("forge.executor.engine.agents.code_agent._has_code_changes", return_value=True)
+    @patch("forge.executor.engine.agents.code_agent._detect_packages", return_value=[])
+    def test_no_packages_with_changes_fails(self, _mock_detect, _mock_changes, _mock_bazel):
+        """Code changes exist but no build targets found — must fail, not silently pass."""
+        state = _make_state(session_dir=self.session_dir, packages=[])
+        preset = _make_preset(
+            self.tmp,
+            bazel_build_command="bazel build {{BUILD_TARGETS}}",
+        )
+
+        result = _verify_build(state, preset, self.tmp, self.session_dir)
+
+        assert result["passed"] is False
+        assert "no build targets" in result["reason"].lower()
+
+    @patch("forge.executor.engine.agents.code_agent.is_bazel_repo", return_value=True)
+    @patch("forge.executor.engine.agents.code_agent._detect_packages", return_value=["platform/authoring/timeline-authoring"])
+    def test_no_packages_in_state_falls_back_to_detection(self, _mock_detect, _mock_bazel):
+        """Packages not in state yet — detect from working tree and build."""
+        state = _make_state(session_dir=self.session_dir, packages=[])
+        preset = _make_preset(
+            self.tmp,
+            bazel_build_command="bazel build {{BUILD_TARGETS}}",
+        )
+
+        with patch("forge.executor.engine.agents.code_agent.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            result = _verify_build(state, preset, self.tmp, self.session_dir)
+
+        assert result["passed"] is True
+        # Verify the build command included the detected package
+        call_args = mock_run.call_args
+        assert "//platform/authoring/timeline-authoring/..." in call_args[1].get("args", call_args[0][0]) or \
+               "//platform/authoring/timeline-authoring/..." in str(call_args)
+
+    @patch("forge.executor.engine.agents.code_agent.is_bazel_repo", return_value=True)
+    @patch("forge.executor.engine.agents.code_agent.build_context")
+    def test_build_timeout(self, mock_context, _mock_bazel):
+        # Mock build_context to return valid context, then mock subprocess.run to timeout
+        mock_context.return_value = {
+            "REPO_ROOT": self.tmp,
+            "BUILD_TARGETS": "//apps/web/...",
+            "AFFECTED_PACKAGES": "apps/web",
+        }
+
+        with patch.object(subprocess, "run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired("cmd", 300)
+            state = _make_state(session_dir=self.session_dir, packages=["apps/web"])
+            preset = _make_preset(
+                self.tmp,
+                bazel_build_command="bazel build {{BUILD_TARGETS}}",
+            )
+
+            result = _verify_build(state, preset, self.tmp, self.session_dir)
+
+            assert result["passed"] is False
+            assert "timed out" in result["reason"].lower()
+
+
 class TestGenerateChecklist:
-    @patch("architect.executor.engine.agents.code_agent.subprocess.run")
+    @patch("forge.executor.engine.agents.code_agent.subprocess.run")
     def test_checklist_from_diff(self, mock_run):
         mock_run.side_effect = [
             MagicMock(stdout=" src/a.ts | 3 +++\n"),   # diff --stat
@@ -244,16 +368,17 @@ class TestCodeAgentRun:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.agents.code_agent._report_pass")
-    @patch("architect.executor.engine.agents.code_agent._has_code_changes", return_value=True)
-    @patch("architect.executor.engine.agents.code_agent._generate_checklist", return_value={
+    @patch("forge.executor.engine.agents.code_agent._verify_build", return_value={"passed": True, "reason": "OK"})
+    @patch("forge.executor.engine.agents.code_agent._report_pass")
+    @patch("forge.executor.engine.agents.code_agent._has_code_changes", return_value=True)
+    @patch("forge.executor.engine.agents.code_agent._generate_checklist", return_value={
         "step": "code", "summary": "1 file", "files_modified": ["a.ts"],
         "files_created": [], "checklist": [],
     })
     @patch.object(AgentRunner, "run", return_value=AgentResult(
         exit_code=0, stdout="done", transcript_path="/t.log", timed_out=False,
     ))
-    def test_pass_when_changes_exist(self, mock_agent, mock_cl, mock_changes, mock_pass):
+    def test_pass_when_changes_exist(self, mock_agent, mock_cl, mock_changes, mock_pass, mock_verify_build):
         state = _make_state(plan_file=self.plan, session_dir=self.session_dir)
         preset = _make_preset(self.tmp)
 
@@ -263,11 +388,12 @@ class TestCodeAgentRun:
         assert outcome.passed is True
         assert outcome.checklist is not None
         mock_pass.assert_called_once()
+        mock_verify_build.assert_called_once()
         # Checklist JSON written to session dir
         assert (Path(self.session_dir) / "code-checklist.json").is_file()
 
-    @patch("architect.executor.engine.agents.code_agent._report_fail")
-    @patch("architect.executor.engine.agents.code_agent._has_code_changes", return_value=False)
+    @patch("forge.executor.engine.agents.code_agent._report_fail")
+    @patch("forge.executor.engine.agents.code_agent._has_code_changes", return_value=False)
     @patch.object(AgentRunner, "run", return_value=AgentResult(
         exit_code=0, stdout="done", transcript_path="/t.log", timed_out=False,
     ))
@@ -282,9 +408,29 @@ class TestCodeAgentRun:
         assert "No code changes" in outcome.reason
         mock_fail.assert_called_once_with(self.session_dir, "No code changes produced")
 
-    @patch("architect.executor.engine.agents.code_agent._report_pass")
-    @patch("architect.executor.engine.agents.code_agent._has_code_changes", return_value=True)
-    @patch("architect.executor.engine.agents.code_agent._generate_checklist", return_value={
+    @patch("forge.executor.engine.agents.code_agent._verify_build", return_value={"passed": False, "reason": "Build failed: error TS2304"})
+    @patch("forge.executor.engine.agents.code_agent._report_fail")
+    @patch("forge.executor.engine.agents.code_agent._has_code_changes", return_value=True)
+    @patch.object(AgentRunner, "run", return_value=AgentResult(
+        exit_code=0, stdout="done", transcript_path="/t.log", timed_out=False,
+    ))
+    def test_fail_when_build_fails(self, mock_agent, mock_changes, mock_fail, mock_verify_build):
+        state = _make_state(plan_file=self.plan, session_dir=self.session_dir)
+        preset = _make_preset(self.tmp, build_command="npm run build")
+
+        outcome = run(state, preset, self.tmp, self.session_dir,
+                      self.activity_log, agent_command="/bin/true")
+
+        assert outcome.passed is False
+        assert "Build failed" in outcome.reason
+        mock_fail.assert_called_once()
+        call_args = mock_fail.call_args[0]
+        assert "Build failed" in call_args[1]
+
+    @patch("forge.executor.engine.agents.code_agent._verify_build", return_value={"passed": True, "reason": "OK"})
+    @patch("forge.executor.engine.agents.code_agent._report_pass")
+    @patch("forge.executor.engine.agents.code_agent._has_code_changes", return_value=True)
+    @patch("forge.executor.engine.agents.code_agent._generate_checklist", return_value={
         "step": "code", "summary": "", "files_modified": [],
         "files_created": [], "checklist": [],
     })
@@ -292,7 +438,7 @@ class TestCodeAgentRun:
         exit_code=1, stdout="agent crashed", transcript_path="/t.log", timed_out=False,
     ))
     def test_pass_despite_agent_crash_if_changes_exist(self, mock_agent, mock_cl,
-                                                        mock_changes, mock_pass):
+                                                        mock_changes, mock_pass, mock_verify_build):
         """Agent exit code doesn't matter — outcome is determined by whether changes exist."""
         state = _make_state(plan_file=self.plan, session_dir=self.session_dir)
         preset = _make_preset(self.tmp)
@@ -301,10 +447,12 @@ class TestCodeAgentRun:
                       self.activity_log, agent_command="/bin/false")
 
         assert outcome.passed is True
+        mock_verify_build.assert_called_once()
 
-    @patch("architect.executor.engine.agents.code_agent._report_pass")
-    @patch("architect.executor.engine.agents.code_agent._has_code_changes", return_value=True)
-    @patch("architect.executor.engine.agents.code_agent._generate_checklist", return_value={
+    @patch("forge.executor.engine.agents.code_agent._verify_build", return_value={"passed": True, "reason": "OK"})
+    @patch("forge.executor.engine.agents.code_agent._report_pass")
+    @patch("forge.executor.engine.agents.code_agent._has_code_changes", return_value=True)
+    @patch("forge.executor.engine.agents.code_agent._generate_checklist", return_value={
         "step": "code", "summary": "", "files_modified": [],
         "files_created": [], "checklist": [],
     })
@@ -312,7 +460,7 @@ class TestCodeAgentRun:
         exit_code=0, stdout="timeout", transcript_path="/t.log", timed_out=True,
     ))
     def test_pass_despite_timeout_if_changes_exist(self, mock_agent, mock_cl,
-                                                    mock_changes, mock_pass):
+                                                    mock_changes, mock_pass, mock_verify_build):
         """Timeout doesn't matter if the agent made valid changes before being killed."""
         state = _make_state(plan_file=self.plan, session_dir=self.session_dir)
         preset = _make_preset(self.tmp)
@@ -321,15 +469,17 @@ class TestCodeAgentRun:
                       self.activity_log, agent_command="/bin/true")
 
         assert outcome.passed is True
+        mock_verify_build.assert_called_once()
 
-    @patch("architect.executor.engine.agents.code_agent._report_pass")
-    @patch("architect.executor.engine.agents.code_agent._has_code_changes", return_value=True)
-    @patch("architect.executor.engine.agents.code_agent._generate_checklist")
+    @patch("forge.executor.engine.agents.code_agent._verify_build", return_value={"passed": True, "reason": "OK"})
+    @patch("forge.executor.engine.agents.code_agent._report_pass")
+    @patch("forge.executor.engine.agents.code_agent._has_code_changes", return_value=True)
+    @patch("forge.executor.engine.agents.code_agent._generate_checklist")
     @patch.object(AgentRunner, "run", return_value=AgentResult(
         exit_code=0, stdout="done", transcript_path="/t.log", timed_out=False,
     ))
     def test_agent_runner_receives_correct_params(self, mock_agent, mock_cl,
-                                                    mock_changes, mock_pass):
+                                                    mock_changes, mock_pass, mock_verify_build):
         mock_cl.return_value = {"step": "code", "summary": "", "files_modified": [],
                                 "files_created": [], "checklist": []}
         state = _make_state(plan_file=self.plan, session_dir=self.session_dir,
@@ -345,6 +495,7 @@ class TestCodeAgentRun:
         assert call_kwargs.kwargs["model"] == "opus"
         assert call_kwargs.kwargs["max_turns"] == 30
         assert call_kwargs.kwargs["timeout_s"] == 1800
+        mock_verify_build.assert_called_once()
 
 
 # -- Prompt snapshot ----------------------------------------------------------
@@ -388,36 +539,3 @@ class TestPromptSnapshot:
         assert "## Task" in prompt
         assert "## After Implementing" in prompt
 
-
-# -- Build result requirement in prompt ---------------------------------------
-
-class TestBuildResultInPrompt:
-    def setup_method(self):
-        self.tmp = tempfile.mkdtemp(prefix="build_result_prompt_test_")
-        self.session_dir = os.path.join(self.tmp, "session")
-        os.makedirs(self.session_dir)
-
-    def teardown_method(self):
-        shutil.rmtree(self.tmp)
-
-    def test_prompt_requires_build_result_json(self):
-        plan = os.path.join(self.tmp, "plan.md")
-        Path(plan).write_text("Add a feature.")
-        state = _make_state(plan_file=plan, session_dir=self.session_dir)
-        preset = _make_preset(self.tmp)
-
-        prompt = generate_prompt(state, preset)
-
-        assert "build-result.json" in prompt
-        assert '"passed": true' in prompt
-        assert "judge will reject" in prompt
-
-    def test_prompt_includes_session_dir_for_build_result(self):
-        plan = os.path.join(self.tmp, "plan.md")
-        Path(plan).write_text("Plan")
-        state = _make_state(plan_file=plan, session_dir=self.session_dir)
-        preset = _make_preset(self.tmp)
-
-        prompt = generate_prompt(state, preset)
-
-        assert f"{self.session_dir}/build-result.json" in prompt

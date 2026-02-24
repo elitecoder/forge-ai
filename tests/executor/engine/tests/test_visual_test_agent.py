@@ -9,7 +9,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from architect.executor.engine.agents.visual_test_agent import (
+from forge.executor.engine.agents.visual_test_agent import (
     run,
     VisualTestConfig,
     VisualTestOutcome,
@@ -27,9 +27,9 @@ from architect.executor.engine.agents.visual_test_agent import (
     _execute_script,
     MAX_SCRIPT_FIX_ATTEMPTS,
 )
-from architect.core.runner import AgentRunner, AgentResult
-from architect.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
-from architect.executor.engine.state import PipelineState, StepState
+from forge.core.runner import AgentRunner, AgentResult
+from forge.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
+from forge.executor.engine.state import PipelineState, StepState
 
 
 def _make_preset(preset_dir="."):
@@ -346,8 +346,8 @@ class TestRun:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.agents.visual_test_agent._report_fail")
-    @patch("architect.executor.engine.agents.visual_test_agent.AgentRunner")
+    @patch("forge.executor.engine.agents.visual_test_agent._report_fail")
+    @patch("forge.executor.engine.agents.visual_test_agent.AgentRunner")
     def test_fails_when_no_script_produced(self, MockRunner, mock_fail):
         """If the script generation agent doesn't produce a script, run() fails."""
         mock_instance = MockRunner.return_value
@@ -368,9 +368,9 @@ class TestRun:
         assert not outcome.passed
         assert "Script generation failed" in outcome.reason
 
-    @patch("architect.executor.engine.agents.visual_test_agent._report_pass")
-    @patch("architect.executor.engine.agents.visual_test_agent._execute_script")
-    @patch("architect.executor.engine.agents.visual_test_agent.AgentRunner")
+    @patch("forge.executor.engine.agents.visual_test_agent._report_pass")
+    @patch("forge.executor.engine.agents.visual_test_agent._execute_script")
+    @patch("forge.executor.engine.agents.visual_test_agent.AgentRunner")
     def test_passes_when_judge_says_pass(self, MockRunner, mock_exec, mock_pass):
         """Full pass path: script generated -> executed -> judge says PASS."""
         mock_instance = MockRunner.return_value
@@ -437,20 +437,20 @@ class TestExecuteScript:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.agents.visual_test_agent.subprocess.run")
+    @patch("forge.executor.engine.agents.visual_test_agent.subprocess.run")
     def test_returns_success_on_zero_exit(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
         ok, output = _execute_script("/tmp/test.js", "/tmp/session", "/repo", self.config)
         assert ok is True
         assert "ok" in output
 
-    @patch("architect.executor.engine.agents.visual_test_agent.subprocess.run")
+    @patch("forge.executor.engine.agents.visual_test_agent.subprocess.run")
     def test_returns_failure_on_nonzero_exit(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
         ok, output = _execute_script("/tmp/test.js", "/tmp/session", "/repo", self.config)
         assert ok is False
 
-    @patch("architect.executor.engine.agents.visual_test_agent.subprocess.run")
+    @patch("forge.executor.engine.agents.visual_test_agent.subprocess.run")
     def test_handles_timeout(self, mock_run):
         import subprocess as sp
         mock_run.side_effect = sp.TimeoutExpired(cmd="node", timeout=300)

@@ -1,0 +1,90 @@
+{
+  "preset": "python-uv",
+  "version": 3,
+  "description": "Python project using uv, ruff, and pytest",
+  "base_ref": "main",
+  "models": {
+    "fix": "sonnet",
+    "code": "sonnet",
+    "code_review": "opus",
+    "create_pr": "sonnet"
+  },
+  "pipelines": {
+    "full": {
+      "steps": ["code", "lint", "test", "code_review", "report", "create_pr"],
+      "dependencies": {
+        "lint": ["code"],
+        "test": ["code"],
+        "code_review": ["lint", "test"],
+        "report": ["code_review"],
+        "create_pr": ["report"]
+      }
+    },
+    "lightweight": {
+      "steps": ["code", "lint", "test", "report"],
+      "dependencies": {
+        "lint": ["code"],
+        "test": ["code"],
+        "report": ["lint", "test"]
+      }
+    }
+  },
+  "steps": {
+    "code": {
+      "type": "ai",
+      "description": "Implement the planned changes",
+      "skill": "skills/code.md",
+      "timeout": 3600
+    },
+    "lint": {
+      "type": "command",
+      "description": "Run ruff linter and formatter",
+      "run_command": "uv run ruff check --fix . && uv run ruff format .",
+      "error_file": "lint-errors.txt",
+      "fix_hints": "Fix ruff errors. Run 'uv run ruff check --fix .' to auto-fix, then manually fix remaining issues.",
+      "timeout": 300,
+      "parallel": true
+    },
+    "test": {
+      "type": "command",
+      "description": "Run pytest",
+      "run_command": "uv run pytest",
+      "error_file": "test-errors.txt",
+      "fix_hints": "Fix failing tests. Read the pytest output carefully and fix the source code or tests as needed.",
+      "timeout": 600,
+      "parallel": true
+    },
+    "code_review": {
+      "type": "ai",
+      "description": "Review code changes for quality, correctness, and style",
+      "skill": "skills/code-review.md",
+      "subagent_type": "general-purpose",
+      "two_phase": true,
+      "timeout": 600,
+      "evidence": [
+        {
+          "rule": "file_exists",
+          "file_glob": "code-review-verdict.json",
+          "min_file_size": 10
+        }
+      ]
+    },
+    "report": {
+      "type": "inline",
+      "description": "Generate pipeline report"
+    },
+    "create_pr": {
+      "type": "ai",
+      "description": "Create a pull request with the changes",
+      "skill": "skills/create-pr.md",
+      "timeout": 300,
+      "evidence": [
+        {
+          "rule": "file_exists",
+          "file_glob": "pr-url.txt",
+          "min_file_size": 5
+        }
+      ]
+    }
+  }
+}

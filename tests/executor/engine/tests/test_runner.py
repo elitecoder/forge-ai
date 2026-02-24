@@ -10,15 +10,15 @@ from pathlib import Path
 from dataclasses import field
 from unittest.mock import patch, MagicMock
 
-from architect.executor.engine.runner import (
+from forge.executor.engine.runner import (
     _generate_code_prompt, generate_ai_prompt, generate_ai_fix_prompt,
     build_context, _checklist_schema_section, _judge_feedback_section,
     _changed_files, _run_one_package,
     _execute_per_package, generate_fix_prompt, _load_claude_md_for_review,
     StepResult,
 )
-from architect.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
-from architect.executor.engine.state import PipelineState, StepState
+from forge.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
+from forge.executor.engine.state import PipelineState, StepState
 
 
 def _make_preset(preset_dir="."):
@@ -237,7 +237,7 @@ class TestPipelineProtocolUpdate:
         assert "WARNING" in prompt
 
     def test_protocol_no_longer_has_on_success_on_failure(self):
-        from architect.executor.engine.runner import PIPELINE_PROTOCOL
+        from forge.executor.engine.runner import PIPELINE_PROTOCOL
         assert "On success:" not in PIPELINE_PROTOCOL
         assert "On failure:" not in PIPELINE_PROTOCOL
 
@@ -360,12 +360,12 @@ class TestAiPromptStructuredOutput:
 # -- _changed_files() exception handler ---------------------------------------
 
 class TestChangedFilesExceptionHandler:
-    @patch("architect.executor.engine.runner.subprocess.run", side_effect=FileNotFoundError("git not found"))
+    @patch("forge.executor.engine.runner.subprocess.run", side_effect=FileNotFoundError("git not found"))
     def test_file_not_found_returns_unable(self, mock_run):
         result = _changed_files()
         assert result == "(unable to determine)"
 
-    @patch("architect.executor.engine.runner.subprocess.run",
+    @patch("forge.executor.engine.runner.subprocess.run",
            side_effect=subprocess.CalledProcessError(128, "git"))
     def test_called_process_error_returns_unable(self, mock_run):
         result = _changed_files()
@@ -389,7 +389,7 @@ class TestRunOnePackage:
         defaults.update(kwargs)
         return StepDefinition(**defaults)
 
-    @patch("architect.executor.engine.runner.subprocess.run")
+    @patch("forge.executor.engine.runner.subprocess.run")
     def test_successful_package_run(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout=b"OK\n", stderr=b"")
         step = self._make_step()
@@ -402,7 +402,7 @@ class TestRunOnePackage:
         assert result.passed is True
         assert "OK" in result.output
 
-    @patch("architect.executor.engine.runner.subprocess.run")
+    @patch("forge.executor.engine.runner.subprocess.run")
     def test_failed_package_with_error_file(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout=b"", stderr=b"FAIL\n")
         step = self._make_step(error_file="test-errors-{{PACKAGE_SLUG}}.txt")
@@ -417,8 +417,8 @@ class TestRunOnePackage:
         assert Path(result.error_file).is_file()
         assert "FAIL" in Path(result.error_file).read_text()
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/fake/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="(mocked)")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/fake/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="(mocked)")
     def test_timeout_during_package_run(self, mock_changed, mock_root):
         def fake_run(*args, **kwargs):
             raise subprocess.TimeoutExpired("cmd", 600)
@@ -427,7 +427,7 @@ class TestRunOnePackage:
         state = _make_state(session_dir=self.session_dir, packages=["apps/web"])
         preset = _make_preset(self.tmp)
 
-        with patch("architect.executor.engine.runner.subprocess.run", side_effect=fake_run):
+        with patch("forge.executor.engine.runner.subprocess.run", side_effect=fake_run):
             pkg, result = _run_one_package(step, state, preset, "apps/web")
 
         assert pkg == "apps/web"
@@ -462,7 +462,7 @@ class TestExecutePerPackage:
         assert result.passed is False
         assert "No affected packages" in result.output
 
-    @patch("architect.executor.engine.runner._run_one_package")
+    @patch("forge.executor.engine.runner._run_one_package")
     def test_parallel_execution_with_multiple_packages(self, mock_run_one):
         mock_run_one.side_effect = [
             ("apps/web", StepResult(passed=True, output="ok")),
@@ -478,7 +478,7 @@ class TestExecutePerPackage:
         assert result.passed is True
         assert mock_run_one.call_count == 2
 
-    @patch("architect.executor.engine.runner._run_one_package")
+    @patch("forge.executor.engine.runner._run_one_package")
     def test_sequential_execution(self, mock_run_one):
         mock_run_one.side_effect = [
             ("apps/web", StepResult(passed=True, output="ok")),
@@ -492,7 +492,7 @@ class TestExecutePerPackage:
         assert result.passed is True
         assert mock_run_one.call_count == 1
 
-    @patch("architect.executor.engine.runner._run_one_package")
+    @patch("forge.executor.engine.runner._run_one_package")
     def test_mixed_results_some_pass_some_fail(self, mock_run_one):
         mock_run_one.side_effect = [
             ("apps/web", StepResult(passed=True, output="ok")),
@@ -597,7 +597,7 @@ class TestJudgeFeedbackJsonError:
 # -- _load_claude_md_for_review() OSError -------------------------------------
 
 class TestLoadClaudeMdOSError:
-    @patch("architect.executor.engine.runner.repo_root", return_value="/fake/repo")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/fake/repo")
     def test_oserror_reading_claude_md_returns_empty(self, mock_root):
         with tempfile.TemporaryDirectory(prefix="claude_md_test_") as tmp:
             claude_md = Path(tmp) / ".claude" / "CLAUDE.md"
@@ -605,7 +605,7 @@ class TestLoadClaudeMdOSError:
             claude_md.write_text("## Code\nFollow patterns.")
             claude_md.chmod(0o000)
             try:
-                with patch("architect.executor.engine.runner.repo_root", return_value=tmp):
+                with patch("forge.executor.engine.runner.repo_root", return_value=tmp):
                     result = _load_claude_md_for_review()
                 # OSError causes continue, falls through to next candidate or returns ""
                 # The result depends on whether global CLAUDE.md also exists
@@ -623,7 +623,7 @@ class TestLoadClaudeMdSectionFiltering:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.runner.repo_root")
+    @patch("forge.executor.engine.runner.repo_root")
     def test_relevant_section_at_end_of_file_included(self, mock_root):
         mock_root.return_value = self.tmp
         claude_dir = Path(self.tmp) / ".claude"
@@ -640,7 +640,7 @@ class TestLoadClaudeMdSectionFiltering:
         assert "Skip this" not in result
 
     @patch("pathlib.Path.home")
-    @patch("architect.executor.engine.runner.repo_root")
+    @patch("forge.executor.engine.runner.repo_root")
     def test_no_relevant_sections_returns_empty(self, mock_root, mock_home):
         mock_root.return_value = self.tmp
         mock_home.return_value = Path(self.tmp) / "fakehome"
@@ -653,7 +653,7 @@ class TestLoadClaudeMdSectionFiltering:
         result = _load_claude_md_for_review()
         assert result == ""
 
-    @patch("architect.executor.engine.runner.repo_root")
+    @patch("forge.executor.engine.runner.repo_root")
     def test_multiple_relevant_sections_collected(self, mock_root):
         mock_root.return_value = self.tmp
         claude_dir = Path(self.tmp) / ".claude"

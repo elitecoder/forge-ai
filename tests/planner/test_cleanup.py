@@ -3,7 +3,7 @@
 import os
 import time
 
-from architect.core.session import cleanup_sessions, list_sessions
+from forge.core.session import cleanup_sessions, list_sessions
 
 
 def test_list_sessions_empty(tmp_path):

@@ -1,10 +1,10 @@
-"""Tests for architect.executor.engine.pipeline_ops — dep_is_satisfied, get_next_steps."""
+"""Tests for forge.executor.engine.pipeline_ops — dep_is_satisfied, get_next_steps."""
 
 import unittest
 
-from architect.executor.engine.registry import StepDefinition
-from architect.executor.engine.state import StepState, StepStatus
-from architect.executor.engine.pipeline_ops import (
+from forge.executor.engine.registry import StepDefinition
+from forge.executor.engine.state import StepState, StepStatus
+from forge.executor.engine.pipeline_ops import (
     dep_is_satisfied, is_permanently_failed, get_next_steps, MAX_RETRIES,
 )
 from tests.executor.helpers import make_state, make_preset

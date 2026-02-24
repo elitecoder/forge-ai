@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from architect.executor.engine.checkpoint import write_checkpoint, verify_checkpoint, verify_all_checkpoints, clear_checkpoints
-from architect.executor.engine.evidence import EvidenceResult
+from forge.executor.engine.checkpoint import write_checkpoint, verify_checkpoint, verify_all_checkpoints, clear_checkpoints
+from forge.executor.engine.evidence import EvidenceResult
 
 
 class TestWriteCheckpoint(unittest.TestCase):
@@ -159,19 +159,19 @@ class TestIsManualSkip(unittest.TestCase):
         shutil.rmtree(self.tmp)
 
     def test_returns_true_for_manual_skip(self):
-        from architect.executor.engine.checkpoint import is_manual_skip
+        from forge.executor.engine.checkpoint import is_manual_skip
         cp_path = os.path.join(self.cp_dir, "test.passed")
         Path(cp_path).write_text("step=test\npassed_at=2026-01-01T00:00:00Z\npipeline=full\nmanual_skip=true\n")
         self.assertTrue(is_manual_skip(self.cp_dir, "test"))
 
     def test_returns_false_for_normal_checkpoint(self):
-        from architect.executor.engine.checkpoint import is_manual_skip
+        from forge.executor.engine.checkpoint import is_manual_skip
         cp_path = os.path.join(self.cp_dir, "build.passed")
         Path(cp_path).write_text("step=build\npassed_at=2026-01-01T00:00:00Z\npipeline=full\n")
         self.assertFalse(is_manual_skip(self.cp_dir, "build"))
 
     def test_returns_false_for_missing_checkpoint(self):
-        from architect.executor.engine.checkpoint import is_manual_skip
+        from forge.executor.engine.checkpoint import is_manual_skip
         self.assertFalse(is_manual_skip(self.cp_dir, "nonexistent"))
 
 

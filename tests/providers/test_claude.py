@@ -3,12 +3,12 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from architect.providers.claude import (
+from forge.providers.claude import (
     ClaudeProvider,
     _child_env,
     _extract_content_text,
 )
-from architect.providers.protocol import AgentResult
+from forge.providers.protocol import AgentResult
 
 
 class TestChildEnv:
@@ -147,7 +147,7 @@ class TestRunAgentNotFound:
 
 class TestProviderModels:
     def test_provider_models_structure(self):
-        from architect.providers.models import PROVIDER_MODELS
+        from forge.providers.models import PROVIDER_MODELS
         assert "claude" in PROVIDER_MODELS
         assert "codex" in PROVIDER_MODELS
         assert PROVIDER_MODELS["claude"]["reasoning"] == "opus"

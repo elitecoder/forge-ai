@@ -9,7 +9,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from architect.executor.engine.state import (
+from forge.executor.engine.state import (
     StateManager, PipelineState, StepState, StepStatus,
     _state_to_dict, _dict_to_state,
 )

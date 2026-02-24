@@ -1,6 +1,48 @@
 Changelog
 =========
 
+0.7.0 (2026-02-23)
+-------------------
+* **Structured event logging**: New ``forge.core.events`` module emits
+  JSONL events for pipeline and planner lifecycle. Per-session ``events.jsonl``
+  captures the full timeline; a global ``registry.jsonl`` indexes only lifecycle
+  events (started/completed/failed/killed) for fast session discovery. Uses
+  ``O_APPEND`` for atomic writes — no file locking. Schema-versioned (``v: 1``).
+* **Registry rotation**: ``registry.jsonl`` rotates at 512 KB, renaming the old
+  file to ``registry.<timestamp>.jsonl``. Rotated files are never deleted.
+* **``forge status`` command**: New CLI subcommand reads executor and planner
+  state files and outputs JSON. Supports ``--active`` (running only) and
+  ``--limit`` flags.
+* **Registry compaction on cleanup**: ``cleanup_sessions()`` now removes registry
+  entries whose session directories no longer exist on disk.
+
+1.0.0 (2026-02-22)
+-------------------
+* **Rename to Forge**: Package renamed from ``architect-ai`` to ``forgeai``.
+  CLI command changed from ``architect`` to ``forge``. All internal imports
+  updated from ``architect.*`` to ``forge.*``. Environment variables renamed
+  from ``ARCHITECT_*`` to ``FORGE_*``. Default session directory changed
+  from ``~/.architect/`` to ``~/.forge/``.
+* **Open-source release**: Stripped all proprietary references. Removed
+  bundled hz-web preset (presets are now user-provided via ``--preset``).
+  Removed hardcoded build script references from prompt templates.
+* **Preset is now required**: ``--preset`` must be explicitly provided when
+  starting a new pipeline. No default preset is assumed.
+* **Token cost estimation**: Planning and execution now display estimated
+  token counts before starting, helping users understand cost implications.
+
+0.5.3 (2026-02-21)
+-------------------
+* **Code agent now verifies build succeeds**: ``code_agent.py:run()`` now runs
+  the build command after the agent completes and verifies it passes (exit code 0)
+  before reporting success. Previously, the agent only checked if code changes
+  were produced, allowing broken TypeScript code with compilation errors to pass
+  as "success" and flow downstream to lint/test steps. Failed builds now save
+  output to ``build-errors.txt`` for the next retry attempt, providing context
+  for the agent to fix compilation errors. The build verification mirrors the
+  same logic as ``generate_prompt()`` — selecting Bazel or npm commands based on
+  repo type and affected packages.
+
 0.5.2 (2026-02-21)
 -------------------
 * **Fix planner agents running without system prompts or tool restrictions**:
@@ -26,13 +68,39 @@ Changelog
   when the pipeline fails, instead of always exiting 0.
 * **Per-attempt transcript naming**: Retry attempts now get distinct transcript
   filenames (``lint_attempt1-transcript.log``, etc.) instead of overwriting.
-* **Build result as required code agent output**: The code agent prompt now
-  requires writing ``build-result.json`` with build command, exit code, and
-  pass/fail status. Evidence rules on the code step verify this file exists
-  and shows ``passed: true``. The judge rejects the step if the file is missing
-  or shows a failed build — same pattern as visual test screenshots. Configurable
-  build command via ``pass_command`` / ``bazel_pass_command`` on step definitions.
-* **7 regression tests** for all fixes above.
+* **Claude Code hooks for lint-on-edit and build verification**: PostToolUse
+  hook runs eslint+prettier on every file edit/write. Stop hook runs the
+  preset's build command when any agent finishes and blocks (exit 2) if it
+  fails — catches build regressions from code_review and lint fix agents.
+  Hook scripts in ``skins/claude-code/hooks/`` and ``scripts/``. The driver
+  sets ``ARCHITECT_BUILD_CMD`` env var from top-level preset fields
+  ``build_command`` / ``bazel_build_command``. Replaces the previous
+  ``build-result.json`` evidence approach which relied on agent self-reporting.
+* **Auto-load hooks via --plugin-dir**: ``ClaudeProvider`` reads
+  ``ARCHITECT_PLUGIN_DIR`` env var and passes ``--plugin-dir`` to all
+  ``claude -p`` subprocesses. The driver sets this at startup via
+  ``_set_plugin_dir()``, pointing to ``skins/claude-code/``. Hooks are now
+  automatically available to all executor agents without worktree changes.
+* **Preset-driven eslint config**: ``eslint_config`` field in the preset
+  manifest (e.g. ``"eslint_config": "tools/lint/eslint.config.mjs"``).
+  The driver resolves the path and sets ``ARCHITECT_ESLINT_CONFIG`` env
+  var so the lint-on-edit hook passes ``--config`` to eslint. Preflight
+  warns if eslint can't find a config and suggests adding the field.
+* **Preflight diagnostics at startup**: ``_preflight_hooks()`` runs before
+  ``dispatch_loop`` and warns if eslint/prettier are missing or eslint
+  cannot find a config for the repo. Issues are printed to stdout and
+  written to the activity log for visibility when running headlessly.
+* **BUILD_TARGETS fallback fix**: ``_set_hook_build_cmd()`` and
+  ``code_agent.generate_prompt()`` no longer default to ``:tsc`` when
+  no affected packages are known. If the template contains
+  ``{{BUILD_TARGETS}}`` and no packages are available, the build command
+  is skipped entirely rather than rendered with a bad fallback.
+* **Hash-based build hook**: Stop hook computes a hash of repo state
+  (``git diff HEAD`` + ``git status``) and only runs the build when
+  state changed since the last successful check. Hash stored per session
+  in ``ARCHITECT_SESSION_DIR``. Non-modifying agents automatically skip
+  the build without needing special-case logic.
+* **18 regression tests** for all fixes above.
 
 0.5.0 (2026-02-21)
 -------------------

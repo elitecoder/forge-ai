@@ -5,13 +5,17 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from architect.planner.driver import PlannerDriver, PHASE_AGENTS
-from architect.planner.engine.state import (
+from forge.planner.driver import (
+    PlannerDriver,
+    PHASE_AGENTS,
+    _load_enrichment_plugins,
+)
+from forge.planner.engine.state import (
     PHASE_ORDER,
     PhaseStatus,
     StateManager,
 )
-from architect.providers.protocol import AgentResult
+from forge.providers.protocol import AgentResult
 
 
 def _make_provider() -> MagicMock:
@@ -360,3 +364,109 @@ def test_derive_context_partial_overrides(tmp_path):
     assert state.core_tension == "my tension"
     assert state.constraint_a == "optimize for speed"
     assert state.constraint_b == "optimize for safety"
+
+
+# ── Enrichment from preset manifest ──────────────────────────────────────
+
+
+def _create_preset_manifest(preset_dir: Path, enrichment: list[dict]) -> None:
+    """Write a minimal preset manifest with enrichment config."""
+    preset_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "preset": "test-preset",
+        "version": 3,
+        "description": "test",
+        "enrichment": enrichment,
+        "pipelines": {},
+        "steps": {},
+        "models": {},
+    }
+    (preset_dir / "manifest.json").write_text(json.dumps(manifest))
+
+
+def test_load_enrichment_plugins_from_preset(tmp_path):
+    preset_dir = tmp_path / "presets" / "hz-web"
+    plugins = [
+        {"skill": "sq-unit-test-planner", "output_suffix": "unit-test-plan"},
+        {"skill": "sq-visual-test-planner", "output_suffix": "visual-test-plan"},
+    ]
+    _create_preset_manifest(preset_dir, plugins)
+
+    loaded = _load_enrichment_plugins(str(preset_dir))
+    assert len(loaded) == 2
+    assert loaded[0]["skill"] == "sq-unit-test-planner"
+    assert loaded[1]["output_suffix"] == "visual-test-plan"
+
+
+def test_load_enrichment_plugins_empty_preset_path():
+    assert _load_enrichment_plugins("") == []
+
+
+def test_load_enrichment_plugins_no_manifest(tmp_path):
+    assert _load_enrichment_plugins(str(tmp_path / "nonexistent")) == []
+
+
+def test_load_enrichment_plugins_no_enrichment_key(tmp_path):
+    preset_dir = tmp_path / "preset"
+    preset_dir.mkdir()
+    (preset_dir / "manifest.json").write_text('{"preset": "x"}')
+    assert _load_enrichment_plugins(str(preset_dir)) == []
+
+
+def test_init_session_stores_preset(tmp_path):
+    session_dir = str(tmp_path / "preset-session")
+    provider = _make_provider()
+    driver = PlannerDriver(
+        provider, session_dir,
+        preset="hz-web", preset_path="/presets/hz-web",
+    )
+    driver._init_session("problem", fast=False)
+
+    state = driver.state_manager.load()
+    assert state.preset == "hz-web"
+    assert state.preset_path == "/presets/hz-web"
+
+
+def test_dispatch_enrichment_with_preset_plugins(tmp_path):
+    preset_dir = tmp_path / "presets" / "hz-web"
+    plugins = [
+        {"skill": "sq-unit-test-planner", "output_suffix": "unit-test-plan"},
+        {"skill": "sq-visual-test-planner", "output_suffix": "visual-test-plan"},
+    ]
+    _create_preset_manifest(preset_dir, plugins)
+
+    session_dir = str(tmp_path / "enrich-session")
+    provider = _make_provider()
+    driver = PlannerDriver(
+        provider, session_dir,
+        preset="hz-web", preset_path=str(preset_dir),
+    )
+    driver._init_session("problem", fast=False)
+
+    # Complete all phases up to enrichment
+    def complete_prior(s):
+        for phase in PHASE_ORDER:
+            if phase == "enrichment":
+                break
+            s.phases[phase].status = PhaseStatus.COMPLETE
+    driver.state_manager.update(complete_prior)
+
+    state = driver.state_manager.load()
+    driver._dispatch_enrichment(state)
+
+    assert provider.run_agent.call_count == 2
+    call_names = [c.kwargs["step_name"] for c in provider.run_agent.call_args_list]
+    assert "enrich-sq-unit-test-planner" in call_names
+    assert "enrich-sq-visual-test-planner" in call_names
+
+
+def test_dispatch_enrichment_without_preset(tmp_path):
+    session_dir = str(tmp_path / "no-preset-session")
+    provider = _make_provider()
+    driver = PlannerDriver(provider, session_dir)
+    driver._init_session("problem", fast=False)
+
+    state = driver.state_manager.load()
+    driver._dispatch_enrichment(state)
+
+    provider.run_agent.assert_not_called()

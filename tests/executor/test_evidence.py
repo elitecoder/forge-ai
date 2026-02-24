@@ -9,13 +9,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from architect.executor.engine.evidence import (
+from forge.executor.engine.evidence import (
     _check_file_exists, _check_json_schema, _check_json_field_equals,
     _check_command_succeeds, _check_all_predecessors, EvidenceChecker, EvidenceResult,
 )
-from architect.executor.engine.registry import EvidenceRule, StepDefinition
-from architect.executor.engine.checkpoint import write_checkpoint
-from architect.executor.engine.state import StepState, StepStatus
+from forge.executor.engine.registry import EvidenceRule, StepDefinition
+from forge.executor.engine.checkpoint import write_checkpoint
+from forge.executor.engine.state import StepState, StepStatus
 
 
 class TestCheckFileExists(unittest.TestCase):
@@ -187,7 +187,7 @@ class TestCheckCommandSucceeds(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertIn("exit 1", result.message)
 
-    @patch("architect.executor.engine.utils.repo_root", return_value="/tmp")
+    @patch("forge.executor.engine.utils.repo_root", return_value="/tmp")
     def test_cwd_repo_root_uses_repo_root(self, mock_rr):
         rule = EvidenceRule(rule="command_succeeds", command="true", cwd="repo_root")
         result = _check_command_succeeds(rule, self.tmp)

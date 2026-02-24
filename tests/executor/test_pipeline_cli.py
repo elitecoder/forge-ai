@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from architect.executor.commands import main
+from forge.executor.commands import main
 
 
 class TestPipelineCLIMain(unittest.TestCase):
@@ -19,59 +19,59 @@ class TestPipelineCLIMain(unittest.TestCase):
         shutil.rmtree(self.tmp)
 
     def test_no_command_exits(self):
-        with patch("sys.argv", ["architect-executor"]):
+        with patch("sys.argv", ["forge-executor"]):
             with self.assertRaises(SystemExit) as ctx:
                 main()
             self.assertNotEqual(ctx.exception.code, 0)
 
     def test_status_without_init_fails(self):
-        with patch("sys.argv", ["architect-executor", "status"]):
-            with patch("architect.executor.commands.find_active_session", return_value=None):
+        with patch("sys.argv", ["forge-executor", "status"]):
+            with patch("forge.executor.commands.find_active_session", return_value=None):
                 with self.assertRaises(SystemExit) as ctx:
                     main()
                 self.assertNotEqual(ctx.exception.code, 0)
 
     def test_next_without_init_fails(self):
-        with patch("sys.argv", ["architect-executor", "next"]):
-            with patch("architect.executor.commands.find_active_session", return_value=None):
+        with patch("sys.argv", ["forge-executor", "next"]):
+            with patch("forge.executor.commands.find_active_session", return_value=None):
                 with self.assertRaises(SystemExit) as ctx:
                     main()
                 self.assertNotEqual(ctx.exception.code, 0)
 
     def test_help_flag(self):
-        with patch("sys.argv", ["architect-executor", "--help"]):
+        with patch("sys.argv", ["forge-executor", "--help"]):
             with self.assertRaises(SystemExit) as ctx:
                 main()
             self.assertEqual(ctx.exception.code, 0)
 
     def test_init_subparser_help(self):
-        with patch("sys.argv", ["architect-executor", "init", "--help"]):
+        with patch("sys.argv", ["forge-executor", "init", "--help"]):
             with self.assertRaises(SystemExit) as ctx:
                 main()
             self.assertEqual(ctx.exception.code, 0)
 
     def test_fail_unknown_step_without_init(self):
-        with patch("sys.argv", ["architect-executor", "fail", "ghost", "some error"]):
-            with patch("architect.executor.commands.find_active_session", return_value=None):
+        with patch("sys.argv", ["forge-executor", "fail", "ghost", "some error"]):
+            with patch("forge.executor.commands.find_active_session", return_value=None):
                 with self.assertRaises(SystemExit) as ctx:
                     main()
                 self.assertNotEqual(ctx.exception.code, 0)
 
     def test_verify_without_init_fails(self):
-        with patch("sys.argv", ["architect-executor", "verify"]):
-            with patch("architect.executor.commands.find_active_session", return_value=None):
+        with patch("sys.argv", ["forge-executor", "verify"]):
+            with patch("forge.executor.commands.find_active_session", return_value=None):
                 with self.assertRaises(SystemExit) as ctx:
                     main()
                 self.assertNotEqual(ctx.exception.code, 0)
 
     def test_sessions_runs(self):
-        with patch("sys.argv", ["architect-executor", "sessions"]):
-            with patch("architect.executor.commands._core_list_sessions", return_value=[]):
+        with patch("sys.argv", ["forge-executor", "sessions"]):
+            with patch("forge.executor.commands._core_list_sessions", return_value=[]):
                 main()
 
     def test_summary_without_init_fails(self):
-        with patch("sys.argv", ["architect-executor", "summary"]):
-            with patch("architect.executor.commands.find_active_session", return_value=None):
+        with patch("sys.argv", ["forge-executor", "summary"]):
+            with patch("forge.executor.commands.find_active_session", return_value=None):
                 with self.assertRaises(SystemExit) as ctx:
                     main()
                 self.assertNotEqual(ctx.exception.code, 0)

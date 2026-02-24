@@ -1,0 +1,28 @@
+{
+  "description": "Architect pipeline hooks: lint-on-edit and build verification on stop",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/lint-on-edit.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/verify-build.sh",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

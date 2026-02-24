@@ -9,13 +9,13 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from architect.executor.engine.judge import (
+from forge.executor.engine.judge import (
     load_criteria, build_judge_prompt, spawn_judge, save_judge_feedback,
     _parse_judge_output, _load_plan_criteria, _load_findings_criteria,
     _load_visual_test_criteria, JudgeVerdict,
 )
-from architect.executor.engine.registry import JudgeConfig
-from architect.executor.engine.state import PipelineState, StepState
+from forge.executor.engine.registry import JudgeConfig
+from forge.executor.engine.state import PipelineState, StepState
 
 
 def _make_state(plan_file="", session_dir=""):
@@ -25,7 +25,7 @@ def _make_state(plan_file="", session_dir=""):
         dependency_graph={},
         session_dir=session_dir,
         pipeline="full",
-        preset="hz-web",
+        preset="test-preset",
         plan_file=plan_file,
     )
 
@@ -123,7 +123,7 @@ class TestLoadCriteriaChangedFiles:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.judge.subprocess.run")
+    @patch("forge.executor.engine.judge.subprocess.run")
     def test_changed_files_criteria(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0,
@@ -139,7 +139,7 @@ class TestLoadCriteriaChangedFiles:
         assert "src/app.ts" in criteria[0]["criteria"]
         assert criteria[1]["id"] == "file-2"
 
-    @patch("architect.executor.engine.judge.subprocess.run")
+    @patch("forge.executor.engine.judge.subprocess.run")
     def test_changed_files_git_not_found(self, mock_run):
         mock_run.side_effect = FileNotFoundError()
         state = _make_state(session_dir=self.tmp)
@@ -264,7 +264,7 @@ class TestParseJudgeOutput:
 
 
 class TestSpawnJudge:
-    @patch("architect.executor.engine.judge.subprocess.run")
+    @patch("forge.executor.engine.judge.subprocess.run")
     def test_spawn_parses_output(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0,
@@ -278,7 +278,7 @@ class TestSpawnJudge:
         assert verdict.passed is True
         mock_run.assert_called_once()
 
-    @patch("architect.executor.engine.judge.subprocess.run")
+    @patch("forge.executor.engine.judge.subprocess.run")
     def test_timeout_returns_fail(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd=[], timeout=120)
 
@@ -288,7 +288,7 @@ class TestSpawnJudge:
         assert verdict.passed is False
         assert "timed out" in verdict.summary.lower()
 
-    @patch("architect.executor.engine.judge.subprocess.run")
+    @patch("forge.executor.engine.judge.subprocess.run")
     def test_missing_cli_returns_fail(self, mock_run):
         mock_run.side_effect = FileNotFoundError()
 
@@ -308,7 +308,7 @@ class TestSpawnJudgeTranscript:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.judge.subprocess.run")
+    @patch("forge.executor.engine.judge.subprocess.run")
     def test_writes_transcript_on_success(self, mock_run):
         stdout = '{"items": [{"id": "a", "verdict": "pass", "reason": "OK"}]}'
         mock_run.return_value = subprocess.CompletedProcess(
@@ -323,7 +323,7 @@ class TestSpawnJudgeTranscript:
         assert Path(transcript_path).is_file()
         assert stdout in Path(transcript_path).read_text()
 
-    @patch("architect.executor.engine.judge.subprocess.run")
+    @patch("forge.executor.engine.judge.subprocess.run")
     def test_writes_transcript_on_timeout(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd=[], timeout=120)
 
@@ -335,7 +335,7 @@ class TestSpawnJudgeTranscript:
         assert Path(transcript_path).is_file()
         assert "timed out" in Path(transcript_path).read_text().lower()
 
-    @patch("architect.executor.engine.judge.subprocess.run")
+    @patch("forge.executor.engine.judge.subprocess.run")
     def test_writes_activity_log(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0,
@@ -351,7 +351,7 @@ class TestSpawnJudgeTranscript:
         log_text = Path(self.activity_log).read_text()
         assert "judge (opus)" in log_text
 
-    @patch("architect.executor.engine.judge.subprocess.run")
+    @patch("forge.executor.engine.judge.subprocess.run")
     def test_no_activity_log_when_path_empty(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0,

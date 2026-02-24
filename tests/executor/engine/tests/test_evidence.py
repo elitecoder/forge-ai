@@ -9,12 +9,12 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from architect.executor.engine.evidence import (
+from forge.executor.engine.evidence import (
     _transitive_deps, _check_all_predecessors, _check_json_schema,
     _check_file_exists, _check_json_field_equals, _check_command_succeeds,
     EvidenceChecker,
 )
-from architect.executor.engine.registry import EvidenceRule, StepDefinition
+from forge.executor.engine.registry import EvidenceRule, StepDefinition
 
 
 class TestTransitiveDeps:
@@ -53,7 +53,7 @@ class TestCheckAllPredecessors:
         rule = EvidenceRule(rule="all_predecessors_checkpointed")
         steps = {"a": None, "b": None, "c": None}
 
-        with patch("architect.executor.engine.checkpoint.verify_checkpoint") as mock_verify:
+        with patch("forge.executor.engine.checkpoint.verify_checkpoint") as mock_verify:
             mock_verify.return_value = (True, "OK")
             result = _check_all_predecessors(rule, "c", steps, "/checkpoints")
             assert result.passed
@@ -67,7 +67,7 @@ class TestCheckAllPredecessors:
         # d depends on c which depends on a. b is unrelated.
         graph = {"c": ["a"], "d": ["c"]}
 
-        with patch("architect.executor.engine.checkpoint.verify_checkpoint") as mock_verify:
+        with patch("forge.executor.engine.checkpoint.verify_checkpoint") as mock_verify:
             mock_verify.return_value = (True, "OK")
             result = _check_all_predecessors(rule, "d", steps, "/checkpoints", graph)
             assert result.passed
@@ -80,7 +80,7 @@ class TestCheckAllPredecessors:
         steps = {"a": None, "b": None, "c": None}
         graph = {"c": ["a", "b"]}
 
-        with patch("architect.executor.engine.checkpoint.verify_checkpoint") as mock_verify:
+        with patch("forge.executor.engine.checkpoint.verify_checkpoint") as mock_verify:
             mock_verify.side_effect = lambda d, name: (False, "missing") if name == "b" else (True, "OK")
             result = _check_all_predecessors(rule, "c", steps, "/checkpoints", graph)
             assert not result.passed
@@ -97,7 +97,7 @@ class TestEvidenceCheckerWithGraph:
             evidence=[EvidenceRule(rule="all_predecessors_checkpointed")],
         )
 
-        with patch("architect.executor.engine.evidence._check_all_predecessors") as mock_check:
+        with patch("forge.executor.engine.evidence._check_all_predecessors") as mock_check:
             mock_check.return_value = type("R", (), {"passed": True, "message": "OK", "artifact_paths": []})()
             checker.check(step)
             _, kwargs = mock_check.call_args
@@ -389,7 +389,7 @@ class TestCommandSucceedsTimeout:
     def test_timeout_expired(self):
         rule = EvidenceRule(rule="command_succeeds", command="sleep 999")
 
-        with patch("architect.executor.engine.evidence.subprocess.run") as mock_run:
+        with patch("forge.executor.engine.evidence.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired(cmd="sleep 999", timeout=120)
             result = _check_command_succeeds(rule, self.tmp)
 

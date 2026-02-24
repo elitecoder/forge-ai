@@ -10,7 +10,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from architect.executor.engine.agents.fix_agent import (
+from forge.executor.engine.agents.fix_agent import (
     generate_prompt,
     run,
     FixAgentOutcome,
@@ -18,9 +18,9 @@ from architect.executor.engine.agents.fix_agent import (
     _run_command,
     _needs_shell,
 )
-from architect.core.runner import AgentRunner, AgentResult
-from architect.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
-from architect.executor.engine.state import PipelineState, StepState
+from forge.core.runner import AgentRunner, AgentResult
+from forge.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
+from forge.executor.engine.state import PipelineState, StepState
 
 
 def _make_preset(preset_dir="."):
@@ -162,7 +162,7 @@ class TestBazelCommandSelection:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.runner.is_bazel_repo", return_value=True)
+    @patch("forge.executor.engine.runner.is_bazel_repo", return_value=True)
     def test_prompt_uses_bazel_command(self, mock_bazel):
         step = _make_step(
             run_command="cd {{REPO_ROOT}}/{{PACKAGE}} && npm run lint:fix",
@@ -177,7 +177,7 @@ class TestBazelCommandSelection:
         assert "bazel run" in prompt
         assert "npm run lint:fix" not in prompt
 
-    @patch("architect.executor.engine.runner.is_bazel_repo", return_value=False)
+    @patch("forge.executor.engine.runner.is_bazel_repo", return_value=False)
     def test_prompt_uses_npm_command_in_non_bazel(self, mock_bazel):
         step = _make_step(
             run_command="cd {{REPO_ROOT}}/{{PACKAGE}} && npm run lint:fix",
@@ -192,8 +192,8 @@ class TestBazelCommandSelection:
         assert "npm run lint:fix" in prompt
         assert "bazel run" not in prompt
 
-    @patch("architect.executor.engine.runner.is_bazel_repo", return_value=True)
-    @patch("architect.executor.engine.agents.fix_agent._run_command", return_value=(True, "OK"))
+    @patch("forge.executor.engine.runner.is_bazel_repo", return_value=True)
+    @patch("forge.executor.engine.agents.fix_agent._run_command", return_value=(True, "OK"))
     def test_re_execute_uses_bazel_command(self, mock_run, mock_bazel):
         step = _make_step(
             run_command="cd {{REPO_ROOT}}/{{PACKAGE}} && npm run lint:fix",
@@ -253,7 +253,7 @@ class TestReExecuteCommand:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.agents.fix_agent._run_command", return_value=(True, "OK"))
+    @patch("forge.executor.engine.agents.fix_agent._run_command", return_value=(True, "OK"))
     def test_single_command_passes(self, mock_run):
         step = _make_step()
         state = _make_state(session_dir=self.session_dir)
@@ -264,7 +264,7 @@ class TestReExecuteCommand:
         assert ok is True
         mock_run.assert_called_once()
 
-    @patch("architect.executor.engine.agents.fix_agent._run_command", return_value=(False, "FAIL"))
+    @patch("forge.executor.engine.agents.fix_agent._run_command", return_value=(False, "FAIL"))
     def test_single_command_fails_writes_error_file(self, mock_run):
         step = _make_step(error_file="test-errors.txt")
         state = _make_state(session_dir=self.session_dir)
@@ -277,7 +277,7 @@ class TestReExecuteCommand:
         assert error_path.is_file()
         assert "FAIL" in error_path.read_text()
 
-    @patch("architect.executor.engine.agents.fix_agent._run_command")
+    @patch("forge.executor.engine.agents.fix_agent._run_command")
     def test_per_package_all_pass(self, mock_run):
         mock_run.side_effect = [(True, "OK 1"), (True, "OK 2")]
         step = _make_step(
@@ -293,7 +293,7 @@ class TestReExecuteCommand:
         assert ok is True
         assert mock_run.call_count == 2
 
-    @patch("architect.executor.engine.agents.fix_agent._run_command")
+    @patch("forge.executor.engine.agents.fix_agent._run_command")
     def test_per_package_one_fails(self, mock_run):
         mock_run.side_effect = [(True, "OK"), (False, "FAIL")]
         step = _make_step(
@@ -325,8 +325,8 @@ class TestFixAgentRun:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.agents.fix_agent._report_pass")
-    @patch("architect.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
+    @patch("forge.executor.engine.agents.fix_agent._report_pass")
+    @patch("forge.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
     @patch.object(AgentRunner, "run", return_value=AgentResult(
         exit_code=0, stdout="fixed", transcript_path="/t.log", timed_out=False,
     ))
@@ -342,8 +342,8 @@ class TestFixAgentRun:
         assert outcome.reason == "Fix verified"
         mock_pass.assert_called_once_with("test")
 
-    @patch("architect.executor.engine.agents.fix_agent._report_fail")
-    @patch("architect.executor.engine.agents.fix_agent._re_execute_command", return_value=(False, "FAIL"))
+    @patch("forge.executor.engine.agents.fix_agent._report_fail")
+    @patch("forge.executor.engine.agents.fix_agent._re_execute_command", return_value=(False, "FAIL"))
     @patch.object(AgentRunner, "run", return_value=AgentResult(
         exit_code=0, stdout="tried", transcript_path="/t.log", timed_out=False,
     ))
@@ -359,8 +359,8 @@ class TestFixAgentRun:
         assert "still fails" in outcome.reason
         mock_fail.assert_called_once()
 
-    @patch("architect.executor.engine.agents.fix_agent._report_pass")
-    @patch("architect.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
+    @patch("forge.executor.engine.agents.fix_agent._report_pass")
+    @patch("forge.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
     @patch.object(AgentRunner, "run", return_value=AgentResult(
         exit_code=1, stdout="crashed", transcript_path="/t.log", timed_out=False,
     ))
@@ -375,8 +375,8 @@ class TestFixAgentRun:
 
         assert outcome.passed is True
 
-    @patch("architect.executor.engine.agents.fix_agent._report_pass")
-    @patch("architect.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
+    @patch("forge.executor.engine.agents.fix_agent._report_pass")
+    @patch("forge.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
     @patch.object(AgentRunner, "run", return_value=AgentResult(
         exit_code=0, stdout="timeout", transcript_path="/t.log", timed_out=True,
     ))
@@ -390,8 +390,8 @@ class TestFixAgentRun:
 
         assert outcome.passed is True
 
-    @patch("architect.executor.engine.agents.fix_agent._report_pass")
-    @patch("architect.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
+    @patch("forge.executor.engine.agents.fix_agent._report_pass")
+    @patch("forge.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
     @patch.object(AgentRunner, "run", return_value=AgentResult(
         exit_code=0, stdout="done", transcript_path="/t.log", timed_out=False,
     ))
@@ -409,8 +409,8 @@ class TestFixAgentRun:
         assert call_kwargs.kwargs["max_turns"] == 40
         assert call_kwargs.kwargs["timeout_s"] == 1800
 
-    @patch("architect.executor.engine.agents.fix_agent._report_pass")
-    @patch("architect.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
+    @patch("forge.executor.engine.agents.fix_agent._report_pass")
+    @patch("forge.executor.engine.agents.fix_agent._re_execute_command", return_value=(True, "OK"))
     @patch.object(AgentRunner, "run", return_value=AgentResult(
         exit_code=0, stdout="done", transcript_path="/t.log", timed_out=False,
     ))

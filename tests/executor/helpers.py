@@ -7,8 +7,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from architect.executor.engine.state import PipelineState, StepState, StepStatus, StateManager, _state_to_dict
-from architect.executor.engine.registry import Preset, StepDefinition, EvidenceRule
+from forge.executor.engine.state import PipelineState, StepState, StepStatus, StateManager, _state_to_dict
+from forge.executor.engine.registry import Preset, StepDefinition, EvidenceRule
 
 
 def make_temp_dir() -> str:
@@ -30,7 +30,7 @@ def make_state(
     return PipelineState(
         phase="execution",
         pipeline=pipeline,
-        preset="hz-web",
+        preset="test-preset",
         current_step=step_names[0],
         steps={name: StepState() for name in step_names},
         step_order=list(step_names),

@@ -1,4 +1,4 @@
-# Architect Plan
+# Forge Plan
 
 Adversarial dual-architecture planning system. Two independent architects design solutions,
 adversarial critics evaluate them, refiners improve them, and a judge synthesizes the final plan.
@@ -6,7 +6,7 @@ adversarial critics evaluate them, refiners improve them, and a judge synthesize
 ## Usage
 
 ```bash
-architect plan "your problem statement" [--fast]
+forge plan "your problem statement" [--fast]
 ```
 
 Options:

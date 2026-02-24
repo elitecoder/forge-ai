@@ -1,0 +1,90 @@
+{
+  "preset": "npm-ts",
+  "version": 3,
+  "description": "TypeScript project using npm, ESLint, and Vitest",
+  "base_ref": "main",
+  "models": {
+    "fix": "sonnet",
+    "code": "sonnet",
+    "code_review": "opus",
+    "create_pr": "sonnet"
+  },
+  "pipelines": {
+    "full": {
+      "steps": ["code", "lint", "test", "code_review", "report", "create_pr"],
+      "dependencies": {
+        "lint": ["code"],
+        "test": ["code"],
+        "code_review": ["lint", "test"],
+        "report": ["code_review"],
+        "create_pr": ["report"]
+      }
+    },
+    "lightweight": {
+      "steps": ["code", "lint", "test", "report"],
+      "dependencies": {
+        "lint": ["code"],
+        "test": ["code"],
+        "report": ["lint", "test"]
+      }
+    }
+  },
+  "steps": {
+    "code": {
+      "type": "ai",
+      "description": "Implement the planned changes",
+      "skill": "skills/code.md",
+      "timeout": 3600
+    },
+    "lint": {
+      "type": "command",
+      "description": "Run ESLint",
+      "run_command": "npx eslint --fix .",
+      "error_file": "lint-errors.txt",
+      "fix_hints": "Fix ESLint errors. Run 'npx eslint --fix .' to auto-fix what you can, then manually fix the rest.",
+      "timeout": 300,
+      "parallel": true
+    },
+    "test": {
+      "type": "command",
+      "description": "Run Vitest",
+      "run_command": "npx vitest run",
+      "error_file": "test-errors.txt",
+      "fix_hints": "Fix failing tests. Read the test output carefully and fix the source code or tests as needed.",
+      "timeout": 600,
+      "parallel": true
+    },
+    "code_review": {
+      "type": "ai",
+      "description": "Review code changes for quality, correctness, and style",
+      "skill": "skills/code-review.md",
+      "subagent_type": "general-purpose",
+      "two_phase": true,
+      "timeout": 600,
+      "evidence": [
+        {
+          "rule": "file_exists",
+          "file_glob": "code-review-verdict.json",
+          "min_file_size": 10
+        }
+      ]
+    },
+    "report": {
+      "type": "inline",
+      "description": "Generate pipeline report"
+    },
+    "create_pr": {
+      "type": "ai",
+      "description": "Create a pull request with the changes",
+      "skill": "skills/create-pr.md",
+      "timeout": 300,
+      "evidence": [
+        {
+          "rule": "file_exists",
+          "file_glob": "pr-url.txt",
+          "min_file_size": 5
+        }
+      ]
+    }
+  }
+}

@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from architect.executor.engine.state import (
+from forge.executor.engine.state import (
     PipelineState, StepState, StepStatus, StateManager,
     _state_to_dict, _dict_to_state,
 )
@@ -50,6 +50,26 @@ class TestDependencyGraphSerialization:
         state = _make_state(["a", "b"])
         d = _state_to_dict(state)
         assert d["dependency_graph"] == {}
+
+
+class TestPresetPathSerialization:
+    def test_round_trip(self):
+        state = _make_state(["a"])
+        state.preset_path = "/home/user/.forge/presets/custom"
+        d = _state_to_dict(state)
+        assert d["preset_path"] == "/home/user/.forge/presets/custom"
+        restored = _dict_to_state(d)
+        assert restored.preset_path == "/home/user/.forge/presets/custom"
+
+    def test_absent_defaults_empty(self):
+        d = {"steps": {}, "step_order": []}
+        state = _dict_to_state(d)
+        assert state.preset_path == ""
+
+    def test_empty_serializes(self):
+        state = _make_state(["a"])
+        d = _state_to_dict(state)
+        assert d["preset_path"] == ""
 
 
 class TestRunnableSteps:

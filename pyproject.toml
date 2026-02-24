@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "architect-ai"
+name = "forgeai"
 version = "0.1.0"
 description = "Adversarial multi-agent planning and deterministic pipeline execution."
 requires-python = ">=3.12"
@@ -11,13 +11,13 @@ license = "Apache-2.0"
 dependencies = ["jsonschema>=4.0"]
 
 [project.scripts]
-architect = "architect.cli:main"
+forge = "forge.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/architect"]
+packages = ["src/forge"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

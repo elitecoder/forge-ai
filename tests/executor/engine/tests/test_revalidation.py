@@ -7,12 +7,12 @@ import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from architect.executor.engine.state import PipelineState, StepState, StepStatus
-from architect.executor.engine.utils import transitive_dependents
+from forge.executor.engine.state import PipelineState, StepState, StepStatus
+from forge.executor.engine.utils import transitive_dependents
 
 
 def _make_state(step_order, dependency_graph=None, statuses=None, retries=None,
-                session_dir="", pipeline="full", preset="hz-web"):
+                session_dir="", pipeline="full", preset="test-preset"):
     statuses = statuses or {}
     retries = retries or {}
     steps = {}
@@ -64,7 +64,7 @@ class TestTransitiveDependents:
         assert transitive_dependents("a", {}) == []
 
     def test_real_pipeline_graph(self):
-        """Test with the actual hz-web full pipeline dependency graph."""
+        """Test with a full pipeline dependency graph."""
         graph = {
             "build_gen": ["code"],
             "lint": ["build_gen"],
@@ -94,8 +94,8 @@ class TestArchiveStepArtifacts:
         shutil.rmtree(self.tmp)
 
     def test_archives_matching_files(self):
-        from architect.executor.engine.registry import StepDefinition, EvidenceRule
-        from architect.executor.commands import _archive_step_artifacts
+        from forge.executor.engine.registry import StepDefinition, EvidenceRule
+        from forge.executor.commands import _archive_step_artifacts
 
         # Create fake evidence artifacts
         Path(os.path.join(self.tmp, "results.json")).write_text('{"ok": true}')
@@ -120,8 +120,8 @@ class TestArchiveStepArtifacts:
         assert not os.path.isfile(os.path.join(self.tmp, "dashboard.html"))
 
     def test_no_artifacts_no_archive_dir(self):
-        from architect.executor.engine.registry import StepDefinition, EvidenceRule
-        from architect.executor.commands import _archive_step_artifacts
+        from forge.executor.engine.registry import StepDefinition, EvidenceRule
+        from forge.executor.commands import _archive_step_artifacts
 
         step_def = StepDefinition(
             name="lint",
@@ -136,8 +136,8 @@ class TestArchiveStepArtifacts:
         assert not os.path.exists(archive_dir)
 
     def test_no_evidence_rules_noop(self):
-        from architect.executor.engine.registry import StepDefinition
-        from architect.executor.commands import _archive_step_artifacts
+        from forge.executor.engine.registry import StepDefinition
+        from forge.executor.commands import _archive_step_artifacts
 
         step_def = StepDefinition(name="build")
         _archive_step_artifacts(step_def, self.tmp, attempt=1)
@@ -156,7 +156,7 @@ class TestArchiveOutputSection:
         shutil.rmtree(self.tmp)
 
     def test_extracts_step_section(self):
-        from architect.executor.commands import _archive_output_section
+        from forge.executor.commands import _archive_output_section
 
         output = "# Pipeline\n\n## lint\n\n- Result: passed\n- Duration: 5s\n\n## test\n\n- Result: passed\n"
         Path(os.path.join(self.tmp, "pipeline-output.md")).write_text(output)
@@ -174,7 +174,7 @@ class TestArchiveOutputSection:
         assert "## test" in remaining
 
     def test_no_output_file_noop(self):
-        from architect.executor.commands import _archive_output_section
+        from forge.executor.commands import _archive_output_section
 
         # No crash when file doesn't exist
         _archive_output_section(self.tmp, "lint", self.archive_dir)
@@ -194,7 +194,7 @@ class TestCmdPassAutoRevalidation:
         shutil.rmtree(self.tmp)
 
     def _make_preset_with_revalidation(self):
-        from architect.executor.engine.registry import Preset, StepDefinition, PipelineDefinition
+        from forge.executor.engine.registry import Preset, StepDefinition, PipelineDefinition
         return Preset(
             name="test", version=3, description="",
             pipelines={
@@ -239,19 +239,19 @@ class TestCmdPassAutoRevalidation:
             session_dir=self.tmp, pipeline="full",
         )
 
-        from architect.executor.commands import cmd_pass
+        from forge.executor.commands import cmd_pass
         args = MagicMock(step="code_review")
         preset = self._make_preset_with_revalidation()
 
         printed = []
-        with patch("architect.executor.commands._require_state", return_value=state):
-            with patch("architect.executor.commands._load_preset_for_state", return_value=preset):
-                with patch("architect.executor.commands._require_dependencies"):
-                    with patch("architect.executor.commands._state_mgr") as mock_mgr:
+        with patch("forge.executor.commands._require_state", return_value=state):
+            with patch("forge.executor.commands._load_preset_for_state", return_value=preset):
+                with patch("forge.executor.commands._require_dependencies"):
+                    with patch("forge.executor.commands._state_mgr") as mock_mgr:
                         mock_mgr.return_value.update = MagicMock(
                             side_effect=lambda fn: (fn(state), state)[1]
                         )
-                        with patch("architect.executor.commands.write_checkpoint", return_value="cp"):
+                        with patch("forge.executor.commands.write_checkpoint", return_value="cp"):
                             with patch("builtins.print", side_effect=lambda *a, **kw: printed.append(str(a[0]))):
                                 cmd_pass(args)
 
@@ -276,7 +276,7 @@ class TestCmdPassAutoRevalidation:
             session_dir=self.tmp, pipeline="full",
         )
 
-        from architect.executor.commands import cmd_pass
+        from forge.executor.commands import cmd_pass
         args = MagicMock(step="code_review")
         preset = self._make_preset_with_revalidation()
 
@@ -284,14 +284,14 @@ class TestCmdPassAutoRevalidation:
             Path(os.path.join(self.checkpoint_dir, f"{step}.passed")).write_text("fake")
 
         printed = []
-        with patch("architect.executor.commands._require_state", return_value=state):
-            with patch("architect.executor.commands._load_preset_for_state", return_value=preset):
-                with patch("architect.executor.commands._require_dependencies"):
-                    with patch("architect.executor.commands._state_mgr") as mock_mgr:
+        with patch("forge.executor.commands._require_state", return_value=state):
+            with patch("forge.executor.commands._load_preset_for_state", return_value=preset):
+                with patch("forge.executor.commands._require_dependencies"):
+                    with patch("forge.executor.commands._state_mgr") as mock_mgr:
                         mock_mgr.return_value.update = MagicMock(
                             side_effect=lambda fn: (fn(state), state)[1]
                         )
-                        with patch("architect.executor.commands.write_checkpoint", return_value="cp"):
+                        with patch("forge.executor.commands.write_checkpoint", return_value="cp"):
                             with patch("builtins.print", side_effect=lambda *a, **kw: printed.append(str(a[0]))):
                                 cmd_pass(args)
 
@@ -319,21 +319,21 @@ class TestCmdPassAutoRevalidation:
             session_dir=self.tmp, pipeline="full",
         )
 
-        from architect.executor.commands import cmd_pass
+        from forge.executor.commands import cmd_pass
         args = MagicMock(step="lint")
         preset = self._make_preset_with_revalidation()
 
         Path(os.path.join(self.checkpoint_dir, "test.passed")).write_text("fake")
 
         printed = []
-        with patch("architect.executor.commands._require_state", return_value=state):
-            with patch("architect.executor.commands._load_preset_for_state", return_value=preset):
-                with patch("architect.executor.commands._require_dependencies"):
-                    with patch("architect.executor.commands._state_mgr") as mock_mgr:
+        with patch("forge.executor.commands._require_state", return_value=state):
+            with patch("forge.executor.commands._load_preset_for_state", return_value=preset):
+                with patch("forge.executor.commands._require_dependencies"):
+                    with patch("forge.executor.commands._state_mgr") as mock_mgr:
                         mock_mgr.return_value.update = MagicMock(
                             side_effect=lambda fn: (fn(state), state)[1]
                         )
-                        with patch("architect.executor.commands.write_checkpoint", return_value="cp"):
+                        with patch("forge.executor.commands.write_checkpoint", return_value="cp"):
                             with patch("builtins.print", side_effect=lambda *a, **kw: printed.append(str(a[0]))):
                                 cmd_pass(args)
 
@@ -363,7 +363,7 @@ class TestCmdPassAutoRevalidation:
             session_dir=self.tmp, pipeline="full",
         )
 
-        from architect.executor.commands import cmd_pass
+        from forge.executor.commands import cmd_pass
         args = MagicMock(step="code_review")
         preset = self._make_preset_with_revalidation()
 
@@ -371,14 +371,14 @@ class TestCmdPassAutoRevalidation:
             Path(os.path.join(self.checkpoint_dir, f"{step}.passed")).write_text("fake")
 
         printed = []
-        with patch("architect.executor.commands._require_state", return_value=state):
-            with patch("architect.executor.commands._load_preset_for_state", return_value=preset):
-                with patch("architect.executor.commands._require_dependencies"):
-                    with patch("architect.executor.commands._state_mgr") as mock_mgr:
+        with patch("forge.executor.commands._require_state", return_value=state):
+            with patch("forge.executor.commands._load_preset_for_state", return_value=preset):
+                with patch("forge.executor.commands._require_dependencies"):
+                    with patch("forge.executor.commands._state_mgr") as mock_mgr:
                         mock_mgr.return_value.update = MagicMock(
                             side_effect=lambda fn: (fn(state), state)[1]
                         )
-                        with patch("architect.executor.commands.write_checkpoint", return_value="cp"):
+                        with patch("forge.executor.commands.write_checkpoint", return_value="cp"):
                             with patch("builtins.print", side_effect=lambda *a, **kw: printed.append(str(a[0]))):
                                 cmd_pass(args)
 
@@ -395,7 +395,7 @@ class TestCmdPassAutoRevalidation:
 
 class TestRevalidationTargetsParsing:
     def test_parsed_from_manifest(self, tmp_path):
-        from architect.executor.engine.registry import load_preset
+        from forge.executor.engine.registry import load_preset
 
         manifest = {
             "preset": "test", "version": 3,
@@ -416,7 +416,7 @@ class TestRevalidationTargetsParsing:
         assert preset.pipelines["full"].revalidation_targets == ["a"]
 
     def test_defaults_to_empty(self, tmp_path):
-        from architect.executor.engine.registry import load_preset
+        from forge.executor.engine.registry import load_preset
 
         manifest = {
             "preset": "test", "version": 3,
@@ -436,7 +436,7 @@ class TestRevalidationTargetsParsing:
         assert preset.pipelines["full"].revalidation_targets == []
 
     def test_legacy_format_no_revalidation(self, tmp_path):
-        from architect.executor.engine.registry import load_preset
+        from forge.executor.engine.registry import load_preset
 
         manifest = {
             "preset": "test", "version": 2,
@@ -464,15 +464,15 @@ class TestCmdSummary:
                 "review": StepStatus.PENDING,
             },
             retries={"test": 2},
-            pipeline="full", preset="hz-web",
+            pipeline="full", preset="test-preset",
         )
         state.affected_packages = ["apps/webapp"]
 
-        from architect.executor.commands import cmd_summary
+        from forge.executor.commands import cmd_summary
         args = MagicMock(json=False)
 
         printed = []
-        with patch("architect.executor.commands._require_state", return_value=state):
+        with patch("forge.executor.commands._require_state", return_value=state):
             with patch("builtins.print", side_effect=lambda *a, **kw: printed.append(str(a[0]))):
                 cmd_summary(args)
 
@@ -491,11 +491,11 @@ class TestCmdSummary:
         )
         state.session_dir = "/tmp/test-session"
 
-        from architect.executor.commands import cmd_summary
+        from forge.executor.commands import cmd_summary
         args = MagicMock(json=True)
 
         printed = []
-        with patch("architect.executor.commands._require_state", return_value=state):
+        with patch("forge.executor.commands._require_state", return_value=state):
             with patch("builtins.print", side_effect=lambda *a, **kw: printed.append(str(a[0]))):
                 cmd_summary(args)
 

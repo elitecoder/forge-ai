@@ -1,4 +1,4 @@
-"""Tests for architect.executor.driver — plan discovery, step execution, dispatch loop, retry logic."""
+"""Tests for forge.executor.driver — plan discovery, step execution, dispatch loop, retry logic."""
 
 import json
 import os
@@ -12,8 +12,8 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock, call
 
-import architect.executor.driver as pipeline_driver
-from architect.executor.driver import (
+import forge.executor.driver as pipeline_driver
+from forge.executor.driver import (
     discover_plan, execute_command_step,
     dispatch_ai_step, _handle_command_step, _handle_ai_step,
     _handle_inline_step, _dispatch_one_step, run_code_review,
@@ -23,6 +23,7 @@ from architect.executor.driver import (
     log_revalidation, log_headline,
     ensure_dev_server, _enforce_file_allowlist, _snapshot_worktree,
     main, _write_status, _recent_log,
+    _set_hook_build_cmd, _set_hook_eslint_config, _set_plugin_dir, _preflight_hooks,
     PIPELINE_TIMEOUT_S, MAX_STEP_RETRIES, MAX_DEV_SERVER_PRECHECK_FAILURES,
 )
 
@@ -144,16 +145,16 @@ class TestReadPlannerSlug:
 class TestExecuteCommandStep:
     """Test execute_command_step via pipeline_ops mocks."""
 
-    @patch("architect.executor.driver.pipeline_ops.mark_failed")
-    @patch("architect.executor.driver.pipeline_ops.mark_passed")
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
-    @patch("architect.executor.engine.runner.execute_command")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_failed")
+    @patch("forge.executor.driver.pipeline_ops.mark_passed")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.engine.runner.execute_command")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_passed_step(self, mock_state, mock_preset, mock_exec, mock_run, mock_pass, mock_fail):
-        from architect.executor.engine.runner import StepResult
-        from architect.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
-        from architect.executor.engine.state import PipelineState, StepState
+        from forge.executor.engine.runner import StepResult
+        from forge.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
+        from forge.executor.engine.state import PipelineState, StepState
 
         mock_state.return_value = PipelineState(steps={"lint": StepState()}, step_order=["lint"])
         step_def = StepDefinition(name="lint", step_type="command", run_command="echo ok")
@@ -170,17 +171,17 @@ class TestExecuteCommandStep:
         mock_pass.assert_called_once()
         mock_fail.assert_not_called()
 
-    @patch("architect.executor.driver.pipeline_ops.mark_failed")
-    @patch("architect.executor.driver.pipeline_ops.mark_passed")
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
-    @patch("architect.executor.engine.runner.execute_command")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_failed")
+    @patch("forge.executor.driver.pipeline_ops.mark_passed")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.engine.runner.execute_command")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_failed_step_with_packages(self, mock_state, mock_preset, mock_exec,
                                        mock_run, mock_pass, mock_fail):
-        from architect.executor.engine.runner import StepResult
-        from architect.executor.engine.registry import StepDefinition, Preset
-        from architect.executor.engine.state import PipelineState, StepState
+        from forge.executor.engine.runner import StepResult
+        from forge.executor.engine.registry import StepDefinition, Preset
+        from forge.executor.engine.state import PipelineState, StepState
 
         mock_state.return_value = PipelineState(steps={"test": StepState()}, step_order=["test"])
         step_def = StepDefinition(name="test", step_type="command", run_command="npm test")
@@ -199,12 +200,12 @@ class TestExecuteCommandStep:
         mock_fail.assert_called_once()
         mock_pass.assert_not_called()
 
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_missing_step_def_returns_failed(self, mock_state, mock_preset, mock_run):
-        from architect.executor.engine.registry import Preset
-        from architect.executor.engine.state import PipelineState, StepState
+        from forge.executor.engine.registry import Preset
+        from forge.executor.engine.state import PipelineState, StepState
 
         mock_state.return_value = PipelineState(steps={"lint": StepState()}, step_order=["lint"])
         mock_preset.return_value = Preset(
@@ -221,12 +222,12 @@ class TestExecuteCommandStep:
 
 
 class TestParallelDispatch:
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver._dispatch_one_step")
-    @patch("architect.executor.driver.run_pre_pr_gate", return_value=True)
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver._dispatch_one_step")
+    @patch("forge.executor.driver.run_pre_pr_gate", return_value=True)
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_concurrent_dispatch(self, mock_state, mock_preset, mock_next,
                                  mock_gate, mock_dispatch, mock_write_status):
         """Two runnable steps are dispatched concurrently via ThreadPoolExecutor."""
@@ -255,9 +256,9 @@ class TestParallelDispatch:
 
 
 class TestBlockedDetection:
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_deadlock_on_blocked_steps(self, mock_state, mock_preset, mock_next):
         """Empty runnable + non-empty blocked -> False (deadlock)."""
         mock_state.return_value = _mock_dispatch_loop_state()
@@ -276,17 +277,17 @@ class TestBlockedDetection:
 
 
 class TestCommandRetryLoop:
-    @patch("architect.executor.engine.agents.fix_agent.run")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
-    @patch("architect.executor.driver.execute_command_step")
+    @patch("forge.executor.engine.agents.fix_agent.run")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.execute_command_step")
     def test_execute_fail_fix_pass(self, mock_exec, mock_mark_run, mock_state, mock_preset, mock_fix):
         """execute->fail->fix_agent passes->(name, True)."""
         mock_exec.return_value = {"step": "lint", "result": "failed"}
-        from architect.executor.engine.agents.fix_agent import FixAgentOutcome
-        from architect.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
-        from architect.executor.engine.state import PipelineState, StepState
+        from forge.executor.engine.agents.fix_agent import FixAgentOutcome
+        from forge.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
+        from forge.executor.engine.state import PipelineState, StepState
 
         mock_preset.return_value = Preset(
             name="test", version=3, description="",
@@ -310,15 +311,15 @@ class TestCommandRetryLoop:
 
 
 class TestAiStepRetry:
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.dispatch_ai_step")
     def test_fail_twice_succeed_third(self, mock_dispatch, mock_state, mock_preset, mock_reset):
         """AI step fails twice then succeeds on third attempt (no judge config)."""
         mock_dispatch.side_effect = [False, False, True]
         # Preset with no judge config for this step
-        from architect.executor.engine.registry import StepDefinition
+        from forge.executor.engine.registry import StepDefinition
         preset = MagicMock()
         preset.steps = {"create_pr": StepDefinition(name="create_pr", step_type="ai")}
         mock_preset.return_value = preset
@@ -329,10 +330,10 @@ class TestAiStepRetry:
         assert success is True
         assert mock_dispatch.call_count == 3
 
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.dispatch_ai_step")
     def test_all_retries_fail(self, mock_dispatch, mock_state, mock_preset, mock_reset):
         """AI step fails all 3 attempts."""
         mock_dispatch.return_value = False
@@ -351,13 +352,13 @@ class TestAiStepRetry:
 
 
 class TestAutoPassRemoval:
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver._snapshot_worktree", return_value=set())
-    @patch("architect.executor.driver.pipeline_ops.mark_failed")
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
-    @patch("architect.executor.driver.AgentRunner")
-    @patch("architect.executor.driver._get_dispatch_config")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver._snapshot_worktree", return_value=set())
+    @patch("forge.executor.driver.pipeline_ops.mark_failed")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.AgentRunner")
+    @patch("forge.executor.driver._get_dispatch_config")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_silent_agent_fails(self, mock_req_state, mock_config, MockRunner,
                                 mock_mark_run, mock_mark_fail, mock_snap, mock_ws):
         """Agent that doesn't call pass/fail -> step is failed (not auto-passed)."""
@@ -370,7 +371,7 @@ class TestAutoPassRemoval:
                 "max_turns": 25, "timeout_ms": 3600000,
             }
             # After agent runs, require_state returns in_progress (agent didn't pass/fail)
-            from architect.executor.engine.state import PipelineState, StepState, StepStatus
+            from forge.executor.engine.state import PipelineState, StepState, StepStatus
             step_state = StepState(status=StepStatus.IN_PROGRESS)
             state = PipelineState(steps={"create_pr": step_state}, step_order=["create_pr"])
             mock_req_state.return_value = state
@@ -395,7 +396,7 @@ class TestCodeReviewVerdict:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver.dispatch_ai_step", return_value=True)
+    @patch("forge.executor.driver.dispatch_ai_step", return_value=True)
     def test_clean_verdict(self, mock_dispatch):
         Path(self.tmp, "code-review-verdict.json").write_text('{"verdict": "CLEAN"}')
 
@@ -403,8 +404,8 @@ class TestCodeReviewVerdict:
 
         assert result is True
 
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
-    @patch("architect.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.dispatch_ai_step")
     def test_has_issues_triggers_fix(self, mock_dispatch, mock_reset):
         Path(self.tmp, "code-review-verdict.json").write_text(
             '{"verdict": "HAS_ISSUES", "issue_count": 3}'
@@ -416,7 +417,7 @@ class TestCodeReviewVerdict:
         assert result is True
         assert mock_dispatch.call_count == 2
 
-    @patch("architect.executor.driver.dispatch_ai_step", return_value=True)
+    @patch("forge.executor.driver.dispatch_ai_step", return_value=True)
     def test_missing_verdict_fails(self, mock_dispatch):
         # No verdict file
         result = run_code_review("/cwd", self.tmp)
@@ -434,14 +435,14 @@ class TestReportStep:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver.pipeline_ops.mark_passed")
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.pipeline_ops.mark_passed")
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
     def test_generates_report_file(self, mock_run, mock_state, mock_summary, mock_pass):
         mock_state.return_value = MagicMock()
         mock_summary.return_value = {
-            "pipeline": "full", "preset": "hz-web",
+            "pipeline": "full", "preset": "test-preset",
             "steps": {
                 "code": {"status": "complete", "retries": 0},
                 "build": {"status": "complete", "retries": 0},
@@ -464,15 +465,15 @@ class TestReportStep:
 
 
 class TestPrePRGate:
-    @patch("architect.executor.pre_pr_gate.run_gate", return_value=True)
+    @patch("forge.executor.pre_pr_gate.run_gate", return_value=True)
     def test_gate_pass(self, mock_gate):
         assert run_pre_pr_gate() is True
 
-    @patch("architect.executor.pre_pr_gate.run_gate", return_value=False)
+    @patch("forge.executor.pre_pr_gate.run_gate", return_value=False)
     def test_gate_fail(self, mock_gate):
         assert run_pre_pr_gate() is False
 
-    @patch("architect.executor.pre_pr_gate.run_gate", side_effect=Exception("boom"))
+    @patch("forge.executor.pre_pr_gate.run_gate", side_effect=Exception("boom"))
     def test_gate_exception_returns_false(self, mock_gate):
         assert run_pre_pr_gate() is False
 
@@ -481,7 +482,7 @@ class TestPrePRGate:
 
 
 class TestPipelineTimeout:
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_timeout_returns_false(self, mock_state):
         """Pipeline returns False when wall-clock exceeds PIPELINE_TIMEOUT_S."""
         mock_state.return_value = _mock_dispatch_loop_state()
@@ -502,13 +503,13 @@ class TestDispatchWithJudge:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver.subprocess.run")
-    @patch("architect.executor.driver.dispatch_ai_step")
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.subprocess.run")
+    @patch("forge.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
     def test_judge_passes_on_first_attempt(self, mock_reset, mock_dispatch, mock_subprocess):
         """Agent produces checklist, judge approves -> True on first attempt."""
-        from architect.executor.engine.registry import JudgeConfig
-        from architect.executor.engine.state import PipelineState, StepState
+        from forge.executor.engine.registry import JudgeConfig
+        from forge.executor.engine.state import PipelineState, StepState
 
         mock_dispatch.return_value = True
 
@@ -526,8 +527,8 @@ class TestDispatchWithJudge:
         state = PipelineState(steps={"code": StepState()}, step_order=["code"])
         config = JudgeConfig(criteria_source="plan", max_retries=3)
 
-        with patch("architect.executor.engine.judge.spawn_judge") as mock_judge:
-            from architect.executor.engine.judge import JudgeVerdict
+        with patch("forge.executor.engine.judge.spawn_judge") as mock_judge:
+            from forge.executor.engine.judge import JudgeVerdict
             mock_judge.return_value = JudgeVerdict(
                 passed=True,
                 items=[{"id": "plan-1", "verdict": "pass", "reason": "OK"}],
@@ -539,13 +540,13 @@ class TestDispatchWithJudge:
         assert result is True
         assert mock_dispatch.call_count == 1
 
-    @patch("architect.executor.driver.subprocess.run")
-    @patch("architect.executor.driver.dispatch_ai_step")
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.subprocess.run")
+    @patch("forge.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
     def test_judge_fails_then_passes_on_retry(self, mock_reset, mock_dispatch, mock_subprocess):
         """Judge fails first attempt, passes on retry."""
-        from architect.executor.engine.registry import JudgeConfig
-        from architect.executor.engine.state import PipelineState, StepState
+        from forge.executor.engine.registry import JudgeConfig
+        from forge.executor.engine.state import PipelineState, StepState
 
         mock_dispatch.return_value = True
 
@@ -564,8 +565,8 @@ class TestDispatchWithJudge:
             args=[], returncode=0, stdout="diff", stderr="",
         )
 
-        with patch("architect.executor.engine.judge.spawn_judge") as mock_judge:
-            from architect.executor.engine.judge import JudgeVerdict
+        with patch("forge.executor.engine.judge.spawn_judge") as mock_judge:
+            from forge.executor.engine.judge import JudgeVerdict
             mock_judge.side_effect = [
                 JudgeVerdict(passed=False, items=[{"id": "plan-1", "verdict": "fail", "reason": "incomplete"}]),
                 JudgeVerdict(passed=True, items=[{"id": "plan-1", "verdict": "pass", "reason": "OK"}]),
@@ -582,12 +583,12 @@ class TestDispatchWithJudge:
         assert result is True
         assert mock_dispatch.call_count == 2
 
-    @patch("architect.executor.driver.dispatch_ai_step")
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
     def test_no_checklist_triggers_retry(self, mock_reset, mock_dispatch):
         """Missing checklist file triggers retry."""
-        from architect.executor.engine.registry import JudgeConfig
-        from architect.executor.engine.state import PipelineState, StepState
+        from forge.executor.engine.registry import JudgeConfig
+        from forge.executor.engine.state import PipelineState, StepState
 
         mock_dispatch.return_value = True
 
@@ -611,7 +612,7 @@ class TestCodeReviewWithJudge:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver.dispatch_ai_step", return_value=True)
+    @patch("forge.executor.driver.dispatch_ai_step", return_value=True)
     def test_clean_verdict_skips_judge(self, mock_dispatch):
         Path(self.tmp, "code-review-verdict.json").write_text('{"verdict": "CLEAN"}')
 
@@ -620,14 +621,14 @@ class TestCodeReviewWithJudge:
         assert result is True
         assert mock_dispatch.call_count == 1
 
-    @patch("architect.executor.driver.subprocess.run")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
-    @patch("architect.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.subprocess.run")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.dispatch_ai_step")
     def test_has_issues_runs_fix_with_judge(self, mock_dispatch, mock_reset,
                                             mock_state, mock_preset, mock_subprocess):
-        from architect.executor.engine.registry import StepDefinition, JudgeConfig, Preset, PipelineDefinition
+        from forge.executor.engine.registry import StepDefinition, JudgeConfig, Preset, PipelineDefinition
 
         Path(self.tmp, "code-review-verdict.json").write_text(
             '{"verdict": "HAS_ISSUES", "issue_count": 2}'
@@ -655,8 +656,8 @@ class TestCodeReviewWithJudge:
         mock_preset.return_value = preset
         mock_state.return_value = MagicMock()
 
-        with patch("architect.executor.engine.judge.spawn_judge") as mock_judge:
-            from architect.executor.engine.judge import JudgeVerdict
+        with patch("forge.executor.engine.judge.spawn_judge") as mock_judge:
+            from forge.executor.engine.judge import JudgeVerdict
             mock_judge.return_value = JudgeVerdict(
                 passed=True,
                 items=[{"id": "f-1", "verdict": "pass", "reason": "Fixed"}],
@@ -727,23 +728,23 @@ class TestLogFunctions:
 
 
 class TestDispatchAiStepEdgeCases:
-    @patch("architect.executor.driver._get_dispatch_config", side_effect=RuntimeError("no step def"))
+    @patch("forge.executor.driver._get_dispatch_config", side_effect=RuntimeError("no step def"))
     def test_dispatch_config_error_returns_false(self, mock_config):
         result = dispatch_ai_step("lint", "run", "/cwd")
         assert result is False
 
-    @patch("architect.executor.driver._get_dispatch_config")
+    @patch("forge.executor.driver._get_dispatch_config")
     def test_empty_prompt_returns_false(self, mock_config):
         mock_config.return_value = {"model": "sonnet", "prompt": "", "max_turns": 25, "timeout_ms": 3600000}
         result = dispatch_ai_step("lint", "run", "/cwd")
         assert result is False
 
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver._snapshot_worktree", return_value=set())
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
-    @patch("architect.executor.driver.AgentRunner")
-    @patch("architect.executor.driver._get_dispatch_config")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver._snapshot_worktree", return_value=set())
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.AgentRunner")
+    @patch("forge.executor.driver._get_dispatch_config")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_agent_passes_step_complete(self, mock_req_state, mock_config, MockRunner,
                                         mock_mark_run, mock_snap, mock_ws):
         old_sd, old_al = pipeline_driver._session_dir, pipeline_driver._activity_log_path
@@ -753,7 +754,7 @@ class TestDispatchAiStepEdgeCases:
             mock_config.return_value = {
                 "model": "sonnet", "prompt": "do it", "max_turns": 25, "timeout_ms": 3600000,
             }
-            from architect.executor.engine.state import PipelineState, StepState, StepStatus
+            from forge.executor.engine.state import PipelineState, StepState, StepStatus
             step_state = StepState(status=StepStatus.COMPLETE)
             state = PipelineState(steps={"lint": step_state}, step_order=["lint"])
             mock_req_state.return_value = state
@@ -765,13 +766,13 @@ class TestDispatchAiStepEdgeCases:
             pipeline_driver._session_dir = old_sd
             pipeline_driver._activity_log_path = old_al
 
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver._snapshot_worktree", return_value=set())
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
-    @patch("architect.executor.driver.pipeline_ops.mark_failed")
-    @patch("architect.executor.driver.AgentRunner")
-    @patch("architect.executor.driver._get_dispatch_config")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver._snapshot_worktree", return_value=set())
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.pipeline_ops.mark_failed")
+    @patch("forge.executor.driver.AgentRunner")
+    @patch("forge.executor.driver._get_dispatch_config")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_agent_fails_step_failed(self, mock_req_state, mock_config, MockRunner,
                                       mock_mark_fail, mock_mark_run, mock_snap, mock_ws):
         old_sd, old_al = pipeline_driver._session_dir, pipeline_driver._activity_log_path
@@ -781,7 +782,7 @@ class TestDispatchAiStepEdgeCases:
             mock_config.return_value = {
                 "model": "sonnet", "prompt": "do it", "max_turns": 25, "timeout_ms": 3600000,
             }
-            from architect.executor.engine.state import PipelineState, StepState, StepStatus
+            from forge.executor.engine.state import PipelineState, StepState, StepStatus
             step_state = StepState(status=StepStatus.FAILED, retries=1)
             state = PipelineState(steps={"lint": step_state}, step_order=["lint"])
             mock_req_state.return_value = state
@@ -792,12 +793,12 @@ class TestDispatchAiStepEdgeCases:
             pipeline_driver._session_dir = old_sd
             pipeline_driver._activity_log_path = old_al
 
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver._snapshot_worktree", return_value=set())
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
-    @patch("architect.executor.driver.AgentRunner")
-    @patch("architect.executor.driver._get_dispatch_config")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver._snapshot_worktree", return_value=set())
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.AgentRunner")
+    @patch("forge.executor.driver._get_dispatch_config")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_fix_phase_uses_suffixed_step_name(self, mock_req_state, mock_config, MockRunner,
                                                 mock_mark_run, mock_snap, mock_ws):
         """Fix phase should use '{step}_fix' as transcript step name."""
@@ -808,7 +809,7 @@ class TestDispatchAiStepEdgeCases:
             mock_config.return_value = {
                 "model": "sonnet", "prompt": "fix it", "max_turns": 25, "timeout_ms": 600000,
             }
-            from architect.executor.engine.state import PipelineState, StepState, StepStatus
+            from forge.executor.engine.state import PipelineState, StepState, StepStatus
             step_state = StepState(status=StepStatus.COMPLETE)
             state = PipelineState(steps={"code_review": step_state}, step_order=["code_review"])
             mock_req_state.return_value = state
@@ -832,11 +833,11 @@ class TestDispatchWithJudgeAgentFails:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver.dispatch_ai_step")
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
     def test_agent_fails_all_retries(self, mock_reset, mock_dispatch):
-        from architect.executor.engine.registry import JudgeConfig
-        from architect.executor.engine.state import PipelineState, StepState
+        from forge.executor.engine.registry import JudgeConfig
+        from forge.executor.engine.state import PipelineState, StepState
 
         mock_dispatch.return_value = False
 
@@ -855,7 +856,7 @@ class TestDispatchWithJudgeAgentFails:
 
 
 class TestHandleCommandStepEdgeCases:
-    @patch("architect.executor.driver.execute_command_step")
+    @patch("forge.executor.driver.execute_command_step")
     def test_initial_pass_returns_true(self, mock_exec):
         mock_exec.return_value = {"step": "build", "result": "passed"}
         name, success = _handle_command_step("build", 0, "/cwd")
@@ -863,18 +864,18 @@ class TestHandleCommandStepEdgeCases:
         assert name == "build"
         assert mock_exec.call_count == 1
 
-    @patch("architect.executor.engine.agents.fix_agent.run")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
-    @patch("architect.executor.driver.execute_command_step")
+    @patch("forge.executor.engine.agents.fix_agent.run")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.execute_command_step")
     def test_exhausted_retries_fix_pass_but_verify_loop(self, mock_exec, mock_mark_run,
                                                          mock_state, mock_preset, mock_fix):
         """Fix agent passes but only MAX_STEP_RETRIES attempts allowed."""
         mock_exec.return_value = {"step": "lint", "result": "failed"}
-        from architect.executor.engine.agents.fix_agent import FixAgentOutcome
-        from architect.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
-        from architect.executor.engine.state import PipelineState, StepState
+        from forge.executor.engine.agents.fix_agent import FixAgentOutcome
+        from forge.executor.engine.registry import StepDefinition, Preset, PipelineDefinition
+        from forge.executor.engine.state import PipelineState, StepState
 
         mock_preset.return_value = Preset(
             name="test", version=3, description="",
@@ -897,20 +898,20 @@ class TestHandleCommandStepEdgeCases:
 
 
 class TestHandleAiStepEdgeCases:
-    @patch("architect.executor.driver.run_code_review", return_value=True)
+    @patch("forge.executor.driver.run_code_review", return_value=True)
     def test_code_review_delegation_pass(self, mock_review):
         name, success = _handle_ai_step("code_review", "/cwd", "/session")
         assert success is True
         assert name == "code_review"
         mock_review.assert_called_once_with("/cwd", "/session")
 
-    @patch("architect.executor.driver.run_code_review", return_value=False)
+    @patch("forge.executor.driver.run_code_review", return_value=False)
     def test_code_review_delegation_fail(self, mock_review):
         name, success = _handle_ai_step("code_review", "/cwd", "/session")
         assert success is False
         assert name == "code_review"
 
-    @patch("architect.executor.driver._handle_visual_test_step", return_value=("visual_test", True))
+    @patch("forge.executor.driver._handle_visual_test_step", return_value=("visual_test", True))
     def test_visual_test_routes_to_handler_pass(self, mock_handler):
         """visual_test step now routes to specialized handler, not judge loop."""
         name, success = _handle_ai_step("visual_test", "/cwd", "/session")
@@ -918,15 +919,15 @@ class TestHandleAiStepEdgeCases:
         assert name == "visual_test"
         mock_handler.assert_called_once_with("/cwd", "/session")
 
-    @patch("architect.executor.driver._handle_visual_test_step", return_value=("visual_test", False))
+    @patch("forge.executor.driver._handle_visual_test_step", return_value=("visual_test", False))
     def test_visual_test_routes_to_handler_fail(self, mock_handler):
         """visual_test step now routes to specialized handler, not judge loop."""
         name, success = _handle_ai_step("visual_test", "/cwd", "/session")
         assert success is False
 
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state", side_effect=Exception("preset load failed"))
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.dispatch_ai_step", return_value=False)
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state", side_effect=Exception("preset load failed"))
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.dispatch_ai_step", return_value=False)
     def test_preset_exception_fails_immediately(self, mock_dispatch, mock_state, mock_preset):
         # Use a generic AI step (not code/visual_test/code_review which have dedicated handlers)
         mock_state.return_value = MagicMock()
@@ -945,14 +946,14 @@ class TestHandleInlineStep:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver.pipeline_ops.mark_passed")
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.pipeline_ops.mark_passed")
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
     def test_report_step_returns_true(self, mock_run, mock_state, mock_summary, mock_pass):
         mock_state.return_value = MagicMock()
         mock_summary.return_value = {
-            "pipeline": "full", "preset": "hz-web", "steps": {}, "session_dir": "/tmp",
+            "pipeline": "full", "preset": "test-preset", "steps": {}, "session_dir": "/tmp",
         }
         name, success = _handle_inline_step("report", self.tmp)
         assert success is True
@@ -968,7 +969,7 @@ class TestHandleInlineStep:
 
 
 class TestDispatchOneStepRouting:
-    @patch("architect.executor.driver._handle_command_step", return_value=("build", True))
+    @patch("forge.executor.driver._handle_command_step", return_value=("build", True))
     def test_routes_command_type(self, mock_handler):
         name, success = _dispatch_one_step(
             {"step": "build", "type": "command", "retries": 0}, "/cwd", "/session"
@@ -976,7 +977,7 @@ class TestDispatchOneStepRouting:
         assert success is True
         mock_handler.assert_called_once_with("build", 0, "/cwd")
 
-    @patch("architect.executor.driver._handle_ai_step", return_value=("code", True))
+    @patch("forge.executor.driver._handle_ai_step", return_value=("code", True))
     def test_routes_ai_type(self, mock_handler):
         name, success = _dispatch_one_step(
             {"step": "code", "type": "ai"}, "/cwd", "/session"
@@ -984,7 +985,7 @@ class TestDispatchOneStepRouting:
         assert success is True
         mock_handler.assert_called_once_with("code", "/cwd", "/session")
 
-    @patch("architect.executor.driver._handle_inline_step", return_value=("report", True))
+    @patch("forge.executor.driver._handle_inline_step", return_value=("report", True))
     def test_routes_inline_type(self, mock_handler):
         name, success = _dispatch_one_step(
             {"step": "report", "type": "inline"}, "/cwd", "/session"
@@ -1010,16 +1011,16 @@ class TestHandleReportStepEdgeCases:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver.subprocess.run")
-    @patch("architect.executor.driver.pipeline_ops.mark_passed")
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.subprocess.run")
+    @patch("forge.executor.driver.pipeline_ops.mark_passed")
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
     def test_with_dashboard_file(self, mock_run, mock_state, mock_summary,
                                   mock_pass, mock_subprocess):
         mock_state.return_value = MagicMock()
         mock_summary.return_value = {
-            "pipeline": "full", "preset": "hz-web",
+            "pipeline": "full", "preset": "test-preset",
             "steps": {
                 "code": {"status": "complete", "retries": 0},
                 "lint": {"status": "failed", "retries": 1, "last_error": "lint failed"},
@@ -1039,14 +1040,14 @@ class TestHandleReportStepEdgeCases:
         mock_subprocess.assert_called_once()
         assert "open" in mock_subprocess.call_args[0][0]
 
-    @patch("architect.executor.driver.pipeline_ops.mark_passed")
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.mark_running")
+    @patch("forge.executor.driver.pipeline_ops.mark_passed")
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_running")
     def test_without_dashboard_file(self, mock_run, mock_state, mock_summary, mock_pass):
         mock_state.return_value = MagicMock()
         mock_summary.return_value = {
-            "pipeline": "full", "preset": "hz-web",
+            "pipeline": "full", "preset": "test-preset",
             "steps": {"code": {"status": "pending", "retries": 0}},
             "session_dir": self.tmp,
         }
@@ -1067,13 +1068,13 @@ class TestRunCodeReviewEdgeCases:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver.dispatch_ai_step", return_value=False)
+    @patch("forge.executor.driver.dispatch_ai_step", return_value=False)
     def test_reviewer_fails_returns_false(self, mock_dispatch):
         result = run_code_review("/cwd", self.tmp)
         assert result is False
         assert mock_dispatch.call_count == 1
 
-    @patch("architect.executor.driver.dispatch_ai_step", return_value=True)
+    @patch("forge.executor.driver.dispatch_ai_step", return_value=True)
     def test_unknown_verdict_returns_false(self, mock_dispatch):
         Path(self.tmp, "code-review-verdict.json").write_text(
             '{"verdict": "MAYBE_ISSUES"}'
@@ -1081,10 +1082,10 @@ class TestRunCodeReviewEdgeCases:
         result = run_code_review("/cwd", self.tmp)
         assert result is False
 
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state", side_effect=Exception("boom"))
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
-    @patch("architect.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state", side_effect=Exception("boom"))
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.dispatch_ai_step")
     def test_has_issues_no_judge_config_trusts_agent(self, mock_dispatch, mock_reset,
                                                       mock_state, mock_preset):
         Path(self.tmp, "code-review-verdict.json").write_text(
@@ -1096,13 +1097,13 @@ class TestRunCodeReviewEdgeCases:
         result = run_code_review("/cwd", self.tmp)
         assert result is True
 
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
-    @patch("architect.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.dispatch_ai_step")
     def test_has_issues_fix_agent_fails_continues(self, mock_dispatch, mock_reset,
                                                    mock_state, mock_preset):
-        from architect.executor.engine.registry import StepDefinition, JudgeConfig
+        from forge.executor.engine.registry import StepDefinition, JudgeConfig
 
         Path(self.tmp, "code-review-verdict.json").write_text(
             '{"verdict": "HAS_ISSUES", "issue_count": 2}'
@@ -1122,15 +1123,15 @@ class TestRunCodeReviewEdgeCases:
         result = run_code_review("/cwd", self.tmp)
         assert result is False
 
-    @patch("architect.executor.driver.subprocess.run")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
-    @patch("architect.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.subprocess.run")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.dispatch_ai_step")
     def test_has_issues_no_fix_checklist_trusts_agent(self, mock_dispatch, mock_reset,
                                                        mock_state, mock_preset,
                                                        mock_subprocess):
-        from architect.executor.engine.registry import StepDefinition, JudgeConfig
+        from forge.executor.engine.registry import StepDefinition, JudgeConfig
 
         Path(self.tmp, "code-review-verdict.json").write_text(
             '{"verdict": "HAS_ISSUES", "issue_count": 1}'
@@ -1168,14 +1169,14 @@ class TestRunCodeReviewEdgeCases:
         result = run_code_review("/cwd", self.tmp)
         assert result is True
 
-    @patch("architect.executor.driver.subprocess.run")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.reset_step")
-    @patch("architect.executor.driver.dispatch_ai_step")
+    @patch("forge.executor.driver.subprocess.run")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.reset_step")
+    @patch("forge.executor.driver.dispatch_ai_step")
     def test_judge_rejects_fix_loop_exhausted(self, mock_dispatch, mock_reset,
                                                mock_state, mock_preset, mock_subprocess):
-        from architect.executor.engine.registry import StepDefinition, JudgeConfig
+        from forge.executor.engine.registry import StepDefinition, JudgeConfig
 
         Path(self.tmp, "code-review-verdict.json").write_text(
             '{"verdict": "HAS_ISSUES", "issue_count": 1}'
@@ -1199,9 +1200,9 @@ class TestRunCodeReviewEdgeCases:
         preset.steps = {"code_review": step_def}
         mock_preset.return_value = preset
 
-        with patch("architect.executor.engine.judge.spawn_judge") as mock_judge, \
-             patch("architect.executor.engine.judge.save_judge_feedback") as mock_save:
-            from architect.executor.engine.judge import JudgeVerdict
+        with patch("forge.executor.engine.judge.spawn_judge") as mock_judge, \
+             patch("forge.executor.engine.judge.save_judge_feedback") as mock_save:
+            from forge.executor.engine.judge import JudgeVerdict
             mock_judge.return_value = JudgeVerdict(
                 passed=False,
                 items=[{"id": "f-1", "verdict": "fail", "reason": "not fixed"}],
@@ -1217,24 +1218,24 @@ class TestRunCodeReviewEdgeCases:
 
 
 class TestEnsureDevServer:
-    @patch("architect.executor.driver.pipeline_ops.allocate_dev_server")
+    @patch("forge.executor.driver.pipeline_ops.allocate_dev_server")
     def test_allocate_returns_non_dict(self, mock_alloc):
         mock_alloc.return_value = "not a dict"
         result = ensure_dev_server("/cwd")
         assert result is False
 
-    @patch("architect.executor.driver.pipeline_ops.allocate_dev_server")
+    @patch("forge.executor.driver.pipeline_ops.allocate_dev_server")
     def test_already_running(self, mock_alloc):
         mock_alloc.return_value = {"port": 3000, "running": True}
         result = ensure_dev_server("/cwd")
         assert result is True
 
-    @patch("architect.executor.driver.time.sleep")
-    @patch("architect.executor.driver.subprocess.run")
-    @patch("architect.executor.driver.subprocess.Popen")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.allocate_dev_server")
+    @patch("forge.executor.driver.time.sleep")
+    @patch("forge.executor.driver.subprocess.run")
+    @patch("forge.executor.driver.subprocess.Popen")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.allocate_dev_server")
     def test_start_and_poll_success(self, mock_alloc, mock_state, mock_preset,
                                     mock_popen, mock_run, mock_sleep):
         mock_alloc.return_value = {"port": 4000, "running": False}
@@ -1253,12 +1254,12 @@ class TestEnsureDevServer:
         assert result is True
         mock_popen.assert_called_once()
 
-    @patch("architect.executor.driver.time.sleep")
-    @patch("architect.executor.driver.subprocess.run")
-    @patch("architect.executor.driver.subprocess.Popen")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.allocate_dev_server")
+    @patch("forge.executor.driver.time.sleep")
+    @patch("forge.executor.driver.subprocess.run")
+    @patch("forge.executor.driver.subprocess.Popen")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.allocate_dev_server")
     def test_start_and_poll_timeout(self, mock_alloc, mock_state, mock_preset,
                                     mock_popen, mock_run, mock_sleep):
         mock_alloc.return_value = {"port": 4000, "running": False}
@@ -1275,12 +1276,12 @@ class TestEnsureDevServer:
         assert result is False
         assert mock_run.call_count == 36
 
-    @patch("architect.executor.driver.time.sleep")
-    @patch("architect.executor.driver.subprocess.run")
-    @patch("architect.executor.driver.subprocess.Popen")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.allocate_dev_server")
+    @patch("forge.executor.driver.time.sleep")
+    @patch("forge.executor.driver.subprocess.run")
+    @patch("forge.executor.driver.subprocess.Popen")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.allocate_dev_server")
     def test_curl_timeout_retries(self, mock_alloc, mock_state, mock_preset,
                                    mock_popen, mock_run, mock_sleep):
         mock_alloc.return_value = {"port": 5000, "running": False}
@@ -1298,11 +1299,11 @@ class TestEnsureDevServer:
         result = ensure_dev_server("/cwd")
         assert result is True
 
-    @patch("architect.executor.driver.time.sleep")
-    @patch("architect.executor.driver.subprocess.Popen")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.allocate_dev_server")
+    @patch("forge.executor.driver.time.sleep")
+    @patch("forge.executor.driver.subprocess.Popen")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.allocate_dev_server")
     def test_early_crash_detection(self, mock_alloc, mock_state, mock_preset,
                                     mock_popen, mock_sleep):
         mock_alloc.return_value = {"port": 4000, "running": False}
@@ -1322,9 +1323,9 @@ class TestEnsureDevServer:
 
 
 class TestDispatchLoopExtended:
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_all_complete_no_blocked_returns_true(self, mock_state, mock_preset, mock_next):
         mock_state.return_value = _mock_dispatch_loop_state()
         mock_preset.return_value = MagicMock()
@@ -1334,11 +1335,11 @@ class TestDispatchLoopExtended:
         result = dispatch_loop("/cwd", "/session", time.time())
         assert result is True
 
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver._dispatch_one_step", return_value=("build", True))
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver._dispatch_one_step", return_value=("build", True))
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_single_step_dispatch(self, mock_state, mock_preset, mock_next,
                                    mock_dispatch, mock_write_status):
         mock_state.return_value = _mock_dispatch_loop_state()
@@ -1353,11 +1354,11 @@ class TestDispatchLoopExtended:
         assert result is True
         mock_dispatch.assert_called_once()
 
-    @patch("architect.executor.driver.pipeline_ops.mark_failed")
-    @patch("architect.executor.driver.run_pre_pr_gate", return_value=False)
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_failed")
+    @patch("forge.executor.driver.run_pre_pr_gate", return_value=False)
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_pre_pr_gate_fail_single_step(self, mock_state, mock_preset, mock_next,
                                            mock_gate, mock_mark_fail):
         mock_state.return_value = _mock_dispatch_loop_state()
@@ -1371,12 +1372,12 @@ class TestDispatchLoopExtended:
         result = dispatch_loop("/cwd", "/session", time.time())
         assert result is True
 
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver.pipeline_ops.mark_failed")
-    @patch("architect.executor.driver.ensure_dev_server", return_value=False)
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver.pipeline_ops.mark_failed")
+    @patch("forge.executor.driver.ensure_dev_server", return_value=False)
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_dev_server_fail_budget_exhausted(self, mock_state, mock_preset, mock_next,
                                                mock_dev, mock_mark_fail, mock_write_status):
         mock_state.return_value = _mock_dispatch_loop_state()
@@ -1401,13 +1402,13 @@ class TestDispatchLoopExtended:
         budget_calls = [c for c in mock_mark_fail.call_args_list if "budget exhausted" in str(c)]
         assert len(budget_calls) == 1
 
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver.pipeline_ops.mark_failed")
-    @patch("architect.executor.driver.run_pre_pr_gate", return_value=False)
-    @patch("architect.executor.driver._dispatch_one_step", return_value=("lint", True))
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver.pipeline_ops.mark_failed")
+    @patch("forge.executor.driver.run_pre_pr_gate", return_value=False)
+    @patch("forge.executor.driver._dispatch_one_step", return_value=("lint", True))
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_parallel_dispatch_with_pre_pr_gate_fail(self, mock_state, mock_preset, mock_next,
                                                       mock_dispatch, mock_gate,
                                                       mock_mark_fail, mock_write_status):
@@ -1427,12 +1428,12 @@ class TestDispatchLoopExtended:
         # create_pr should have been filtered out, only lint dispatched
         mock_dispatch.assert_called_once()
 
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver.ensure_dev_server", return_value=False)
-    @patch("architect.executor.driver._dispatch_one_step", return_value=("lint", True))
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver.ensure_dev_server", return_value=False)
+    @patch("forge.executor.driver._dispatch_one_step", return_value=("lint", True))
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_parallel_dispatch_with_dev_server_fail(self, mock_state, mock_preset, mock_next,
                                                      mock_dispatch, mock_dev, mock_write_status):
         mock_state.return_value = _mock_dispatch_loop_state()
@@ -1449,11 +1450,11 @@ class TestDispatchLoopExtended:
         result = dispatch_loop("/cwd", "/session", time.time())
         assert result is True
 
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver._dispatch_one_step", side_effect=Exception("worker crash"))
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver._dispatch_one_step", side_effect=Exception("worker crash"))
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_parallel_dispatch_exception_in_future(self, mock_state, mock_preset, mock_next,
                                                     mock_dispatch, mock_write_status):
         mock_state.return_value = _mock_dispatch_loop_state()
@@ -1470,11 +1471,11 @@ class TestDispatchLoopExtended:
         result = dispatch_loop("/cwd", "/session", time.time())
         assert result is True
 
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver._dispatch_one_step", return_value=("build", True))
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver._dispatch_one_step", return_value=("build", True))
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_revalidation_detected(self, mock_state, mock_preset, mock_next,
                                     mock_dispatch, mock_write_status):
         mock_state.return_value = _mock_dispatch_loop_state()
@@ -1492,12 +1493,12 @@ class TestDispatchLoopExtended:
         result = dispatch_loop("/cwd", "/session", time.time())
         assert result is True
 
-    @patch("architect.executor.driver.pipeline_ops.mark_failed")
-    @patch("architect.executor.driver.ensure_dev_server", return_value=False)
-    @patch("architect.executor.driver._dispatch_one_step", return_value=("lint", True))
-    @patch("architect.executor.driver.pipeline_ops.get_next_steps")
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.mark_failed")
+    @patch("forge.executor.driver.ensure_dev_server", return_value=False)
+    @patch("forge.executor.driver._dispatch_one_step", return_value=("lint", True))
+    @patch("forge.executor.driver.pipeline_ops.get_next_steps")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_parallel_dev_server_budget_exhausted(self, mock_state, mock_preset, mock_next,
                                                    mock_dispatch, mock_dev, mock_mark_fail):
         mock_state.return_value = _mock_dispatch_loop_state()
@@ -1530,15 +1531,15 @@ class TestMain:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver._stop_status_updater")
-    @patch("architect.executor.driver._start_status_updater")
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver.dispatch_loop", return_value=True)
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.state_mgr")
-    @patch("architect.executor.driver.signal.signal")
-    @patch("sys.argv", ["architect-driver", "--resume"])
+    @patch("forge.executor.driver._stop_status_updater")
+    @patch("forge.executor.driver._start_status_updater")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver.dispatch_loop", return_value=True)
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.state_mgr")
+    @patch("forge.executor.driver.signal.signal")
+    @patch("sys.argv", ["forge-driver", "--resume"])
     def test_resume_path(self, mock_signal, mock_state_mgr, mock_state, mock_summary,
                          mock_dispatch, mock_ws, mock_start_updater, mock_stop_updater):
         session_dir = os.path.join(self.tmp, "session")
@@ -1556,15 +1557,15 @@ class TestMain:
 
         mock_dispatch.assert_called_once()
 
-    @patch("architect.executor.driver._stop_status_updater")
-    @patch("architect.executor.driver._start_status_updater")
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver.dispatch_loop", return_value=True)
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.state_mgr")
-    @patch("architect.executor.commands.cmd_init")
-    @patch("architect.executor.driver.signal.signal")
+    @patch("forge.executor.driver._stop_status_updater")
+    @patch("forge.executor.driver._start_status_updater")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver.dispatch_loop", return_value=True)
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.state_mgr")
+    @patch("forge.executor.commands.cmd_init")
+    @patch("forge.executor.driver.signal.signal")
     def test_fresh_init_path(self, mock_signal, mock_cmd_init, mock_state_mgr,
                               mock_state, mock_summary, mock_dispatch,
                               mock_ws, mock_start_updater, mock_stop_updater):
@@ -1580,33 +1581,34 @@ class TestMain:
         }
         mock_state_mgr.return_value = MagicMock()
 
-        with patch("sys.argv", ["architect-driver", "--plan", plan_file,
+        with patch("sys.argv", ["forge-driver", "--plan", plan_file,
+                                 "--preset", "test-preset",
                                  "--packages", "apps/web"]):
             main()
 
         mock_dispatch.assert_called_once()
 
-    @patch("architect.executor.driver.signal.signal")
+    @patch("forge.executor.driver.signal.signal")
     def test_dry_run(self, mock_signal, capsys):
         plan_file = os.path.join(self.tmp, "plan.md")
         Path(plan_file).write_text("# Plan\n\nSome plan content here")
 
-        with patch("sys.argv", ["architect-driver", "--plan", plan_file, "--dry-run"]):
+        with patch("sys.argv", ["forge-driver", "--plan", plan_file, "--preset", "test-preset", "--dry-run"]):
             main()
 
         captured = capsys.readouterr()
         assert "Would run" in captured.out
-        assert "architect execute init" in captured.out
+        assert "forge execute init" in captured.out
 
-    @patch("architect.executor.driver._stop_status_updater")
-    @patch("architect.executor.driver._start_status_updater")
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver.dispatch_loop", return_value=False)
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.state_mgr")
-    @patch("architect.executor.driver.signal.signal")
-    @patch("sys.argv", ["architect-driver", "--resume"])
+    @patch("forge.executor.driver._stop_status_updater")
+    @patch("forge.executor.driver._start_status_updater")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver.dispatch_loop", return_value=False)
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.state_mgr")
+    @patch("forge.executor.driver.signal.signal")
+    @patch("sys.argv", ["forge-driver", "--resume"])
     def test_resume_failed_pipeline(self, mock_signal, mock_state_mgr, mock_state,
                                      mock_summary, mock_dispatch, mock_ws,
                                      mock_start_updater, mock_stop_updater, capsys):
@@ -1628,22 +1630,22 @@ class TestMain:
         captured = capsys.readouterr()
         assert "Resume with" in captured.out
 
-    @patch("architect.executor.driver.pipeline_ops.require_state",
+    @patch("forge.executor.driver.pipeline_ops.require_state",
            side_effect=RuntimeError("No active pipeline"))
-    @patch("sys.argv", ["architect-driver", "--resume"])
+    @patch("sys.argv", ["forge-driver", "--resume"])
     def test_resume_no_state_exits(self, mock_state):
         with pytest.raises(SystemExit) as exc_info:
             main()
         assert exc_info.value.code == 1
 
-    @patch("architect.executor.driver._stop_status_updater")
-    @patch("architect.executor.driver._start_status_updater")
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver.dispatch_loop", return_value=True)
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.state_mgr")
-    @patch("architect.executor.driver.signal.signal")
+    @patch("forge.executor.driver._stop_status_updater")
+    @patch("forge.executor.driver._start_status_updater")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver.dispatch_loop", return_value=True)
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.state_mgr")
+    @patch("forge.executor.driver.signal.signal")
     def test_sigint_handler_registered(self, mock_signal, mock_state_mgr, mock_state,
                                         mock_summary, mock_dispatch, mock_ws,
                                         mock_start_updater, mock_stop_updater):
@@ -1659,21 +1661,21 @@ class TestMain:
         }
         mock_state_mgr.return_value = MagicMock()
 
-        with patch("sys.argv", ["architect-driver", "--plan", plan_file]):
-            with patch("architect.executor.commands.cmd_init"):
+        with patch("sys.argv", ["forge-driver", "--plan", plan_file, "--preset", "test-preset"]):
+            with patch("forge.executor.commands.cmd_init"):
                 main()
 
         # Verify SIGINT handler was registered
         signal_calls = [c for c in mock_signal.call_args_list if c[0][0] == signal.SIGINT]
         assert len(signal_calls) == 1
 
-    @patch("architect.executor.driver._stop_status_updater")
-    @patch("architect.executor.driver._start_status_updater")
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver.dispatch_loop", return_value=True)
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.state_mgr")
+    @patch("forge.executor.driver._stop_status_updater")
+    @patch("forge.executor.driver._start_status_updater")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver.dispatch_loop", return_value=True)
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.state_mgr")
     def test_sigint_handler_behavior(self, mock_state_mgr, mock_state, mock_summary,
                                       mock_dispatch, mock_ws, mock_start_updater, mock_stop_updater):
         plan_file = os.path.join(self.tmp, "plan.md")
@@ -1695,9 +1697,9 @@ class TestMain:
                 captured_handler[0] = handler
             return original_signal(sig, handler)
 
-        with patch("architect.executor.driver.signal.signal", side_effect=capture_signal):
-            with patch("sys.argv", ["architect-driver", "--plan", plan_file]):
-                with patch("architect.executor.commands.cmd_init"):
+        with patch("forge.executor.driver.signal.signal", side_effect=capture_signal):
+            with patch("sys.argv", ["forge-driver", "--plan", plan_file, "--preset", "test-preset"]):
+                with patch("forge.executor.commands.cmd_init"):
                     main()
 
         assert captured_handler[0] is not None
@@ -1705,15 +1707,15 @@ class TestMain:
             captured_handler[0](signal.SIGINT, None)
         assert exc_info.value.code == 130
 
-    @patch("architect.executor.driver._stop_status_updater")
-    @patch("architect.executor.driver._start_status_updater")
-    @patch("architect.executor.driver._write_status")
-    @patch("architect.executor.driver.dispatch_loop", return_value=True)
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver.pipeline_ops.state_mgr")
-    @patch("architect.executor.commands.cmd_init")
-    @patch("architect.executor.driver.signal.signal")
+    @patch("forge.executor.driver._stop_status_updater")
+    @patch("forge.executor.driver._start_status_updater")
+    @patch("forge.executor.driver._write_status")
+    @patch("forge.executor.driver.dispatch_loop", return_value=True)
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.state_mgr")
+    @patch("forge.executor.commands.cmd_init")
+    @patch("forge.executor.driver.signal.signal")
     def test_fresh_init_creates_output_files(self, mock_signal, mock_cmd_init, mock_state_mgr,
                                               mock_state, mock_summary, mock_dispatch,
                                               mock_ws, mock_start_updater, mock_stop_updater):
@@ -1729,7 +1731,7 @@ class TestMain:
         }
         mock_state_mgr.return_value = MagicMock()
 
-        with patch("sys.argv", ["architect-driver", "--plan", plan_file]):
+        with patch("sys.argv", ["forge-driver", "--plan", plan_file, "--preset", "test-preset"]):
             main()
 
         assert Path(session_dir, "pipeline-output.md").is_file()
@@ -1745,13 +1747,13 @@ class TestWriteStatus:
     def teardown_method(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_writes_markdown_with_step_table(self, mock_state, mock_summary):
         mock_state.return_value = MagicMock()
         mock_summary.return_value = {
             "pipeline": "full",
-            "preset": "hz-web",
+            "preset": "test-preset",
             "created_at": "2026-02-17T10:00:00Z",
             "steps": {
                 "code": {"status": "complete", "retries": 0,
@@ -1776,28 +1778,28 @@ class TestWriteStatus:
         assert "RUNNING" in content
         assert "full" in content
 
-    @patch("architect.executor.driver.pipeline_ops.require_state",
+    @patch("forge.executor.driver.pipeline_ops.require_state",
            side_effect=RuntimeError("no state"))
     def test_state_failure_does_not_crash(self, mock_state):
         _write_status(self.tmp)
         assert not Path(self.tmp, "pipeline-status.md").is_file()
 
-    @patch("architect.executor.driver.pipeline_ops.get_summary", return_value="not a dict")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.get_summary", return_value="not a dict")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_non_dict_status_does_not_crash(self, mock_state, mock_summary):
         mock_state.return_value = MagicMock()
         _write_status(self.tmp)
         assert not Path(self.tmp, "pipeline-status.md").is_file()
 
-    @patch("architect.executor.driver.pipeline_ops.get_summary")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.get_summary")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_recent_activity_included(self, mock_state, mock_summary):
         _recent_log.clear()
         _recent_log.append("[10:00] code         passed  5s")
 
         mock_state.return_value = MagicMock()
         mock_summary.return_value = {
-            "pipeline": "full", "preset": "hz-web", "created_at": "",
+            "pipeline": "full", "preset": "test-preset", "created_at": "",
             "steps": {"code": {"status": "complete", "retries": 0}},
             "step_order": ["code"],
             "dependency_graph": {},
@@ -1814,10 +1816,10 @@ class TestWriteStatus:
 class TestMainNoPlanOrResume:
     """Cover parser.error when neither --plan nor --plan-dir provided."""
 
-    @patch("architect.executor.driver.dispatch_loop", return_value=True)
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.dispatch_loop", return_value=True)
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_no_plan_no_resume_exits(self, mock_state, mock_loop):
-        with patch("sys.argv", ["architect-driver"]):
+        with patch("sys.argv", ["forge-driver"]):
             with pytest.raises(SystemExit) as exc_info:
                 main()
             assert exc_info.value.code == 2  # argparse error exit code
@@ -1830,16 +1832,16 @@ class TestEnforceFileAllowlist:
     """Tests for _enforce_file_allowlist and _snapshot_worktree."""
 
     def _make_preset(self, allowed):
-        from architect.executor.engine.registry import StepDefinition, Preset
+        from forge.executor.engine.registry import StepDefinition, Preset
         step = StepDefinition(name="visual_test", step_type="ai", allowed_file_patterns=allowed)
         return Preset(
             name="test", version=3, description="", pipelines={},
             steps={"visual_test": step}, models={},
         )
 
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver._snapshot_worktree")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._snapshot_worktree")
     @patch("subprocess.run")
     def test_violations_reverted_and_returned(self, mock_run, mock_snap, mock_state, mock_preset):
         mock_preset.return_value = self._make_preset([])  # deny all
@@ -1858,9 +1860,9 @@ class TestEnforceFileAllowlist:
         assert args[0:3] == ["git", "checkout", "--"]
         assert set(args[3:]) == {"src/Bar.ts", "src/Foo.ts"}
 
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver._snapshot_worktree")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._snapshot_worktree")
     def test_no_violations_when_unrestricted(self, mock_snap, mock_state, mock_preset):
         mock_preset.return_value = self._make_preset(None)  # unrestricted
         mock_state.return_value = MagicMock()
@@ -1868,9 +1870,9 @@ class TestEnforceFileAllowlist:
         violations = _enforce_file_allowlist("visual_test", "/cwd", set())
         assert violations == []
 
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver._snapshot_worktree")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._snapshot_worktree")
     def test_allowed_patterns_pass(self, mock_snap, mock_state, mock_preset):
         mock_preset.return_value = self._make_preset(["*.json", "*.md"])
         mock_state.return_value = MagicMock()
@@ -1883,9 +1885,9 @@ class TestEnforceFileAllowlist:
 
         assert violations == ["src/Foo.ts"]
 
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver._snapshot_worktree")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._snapshot_worktree")
     def test_no_new_files_no_violations(self, mock_snap, mock_state, mock_preset):
         mock_preset.return_value = self._make_preset([])
         mock_state.return_value = MagicMock()
@@ -1894,9 +1896,9 @@ class TestEnforceFileAllowlist:
         violations = _enforce_file_allowlist("visual_test", "/cwd", before)
         assert violations == []
 
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state")
-    @patch("architect.executor.driver.pipeline_ops.require_state")
-    @patch("architect.executor.driver._snapshot_worktree")
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver._snapshot_worktree")
     def test_only_delta_checked(self, mock_snap, mock_state, mock_preset):
         """Pre-existing modifications from code step are not flagged."""
         mock_preset.return_value = self._make_preset([])
@@ -1910,9 +1912,9 @@ class TestEnforceFileAllowlist:
 
         assert violations == ["src/Rogue.ts"]
 
-    @patch("architect.executor.driver.pipeline_ops.load_preset_for_state",
+    @patch("forge.executor.driver.pipeline_ops.load_preset_for_state",
            side_effect=Exception("no preset"))
-    @patch("architect.executor.driver.pipeline_ops.require_state")
+    @patch("forge.executor.driver.pipeline_ops.require_state")
     def test_preset_load_failure_is_permissive(self, mock_state, mock_preset):
         violations = _enforce_file_allowlist("visual_test", "/cwd", set())
         assert violations == []
@@ -1962,7 +1964,7 @@ class TestConcurrentDriverGuard:
 
     def test_set_driver_pid_raises_when_existing_driver_alive(self):
         """If another driver PID is alive, _set_driver_pid should raise RuntimeError."""
-        from architect.executor.engine.state import StateManager, PipelineState, StepState
+        from forge.executor.engine.state import StateManager, PipelineState, StepState
 
         state_file = Path(self.session_dir) / "agent-state.json"
         mgr = StateManager(state_file)
@@ -1976,7 +1978,7 @@ class TestConcurrentDriverGuard:
 
         # Import the main function's inner _set_driver_pid by running
         # a simplified version of the guard logic
-        from architect.executor.engine import pipeline_ops
+        from forge.executor.engine import pipeline_ops
 
         with patch.object(pipeline_ops, "state_mgr", return_value=mgr):
             # Simulate the guard: load state, check PID
@@ -1994,7 +1996,7 @@ class TestConcurrentDriverGuard:
 
     def test_set_driver_pid_succeeds_when_no_existing_driver(self):
         """If no existing driver PID, _set_driver_pid should succeed."""
-        from architect.executor.engine.state import StateManager, PipelineState, StepState
+        from forge.executor.engine.state import StateManager, PipelineState, StepState
 
         state_file = Path(self.session_dir) / "agent-state.json"
         mgr = StateManager(state_file)
@@ -2011,7 +2013,7 @@ class TestConcurrentDriverGuard:
 
     def test_set_driver_pid_succeeds_when_existing_driver_dead(self):
         """If existing driver PID is dead, _set_driver_pid should succeed."""
-        from architect.executor.engine.state import StateManager, PipelineState, StepState
+        from forge.executor.engine.state import StateManager, PipelineState, StepState
 
         state_file = Path(self.session_dir) / "agent-state.json"
         mgr = StateManager(state_file)
@@ -2051,7 +2053,7 @@ class TestResetOrphanedInProgressSteps:
 
     def _make_state_with_statuses(self, step_statuses: dict[str, str]) -> None:
         """Create and save a state where steps have the given statuses."""
-        from architect.executor.engine.state import StateManager, PipelineState, StepState, StepStatus
+        from forge.executor.engine.state import StateManager, PipelineState, StepState, StepStatus
         steps = {}
         for name, status_str in step_statuses.items():
             ss = StepState(status=StepStatus(status_str))
@@ -2059,7 +2061,7 @@ class TestResetOrphanedInProgressSteps:
                 ss.started_at = "2026-01-01T00:00:00Z"
             steps[name] = ss
         state = PipelineState(
-            pipeline="full", preset="hz-web",
+            pipeline="full", preset="test-preset",
             current_step=list(step_statuses.keys())[0],
             steps=steps,
             step_order=list(step_statuses.keys()),
@@ -2075,8 +2077,8 @@ class TestResetOrphanedInProgressSteps:
 
     def test_in_progress_steps_reset_to_pending(self):
         """IN_PROGRESS steps should become PENDING after reset_step(no_retry_inc=True)."""
-        from architect.executor.engine import pipeline_ops
-        from architect.executor.engine.state import StateManager, StepStatus
+        from forge.executor.engine import pipeline_ops
+        from forge.executor.engine.state import StateManager, StepStatus
 
         mgr = self._make_state_with_statuses({
             "code": "complete", "build": "in_progress", "test": "pending",
@@ -2092,8 +2094,8 @@ class TestResetOrphanedInProgressSteps:
 
     def test_no_retry_inc_preserves_retry_count(self):
         """reset_step(no_retry_inc=True) must NOT increment the retry counter."""
-        from architect.executor.engine import pipeline_ops
-        from architect.executor.engine.state import StateManager, StepStatus
+        from forge.executor.engine import pipeline_ops
+        from forge.executor.engine.state import StateManager, StepStatus
 
         mgr = self._make_state_with_statuses({
             "code": "complete", "build": "in_progress", "test": "pending",
@@ -2109,8 +2111,8 @@ class TestResetOrphanedInProgressSteps:
 
     def test_complete_and_pending_steps_not_touched(self):
         """COMPLETE and PENDING steps should be unchanged after resetting orphaned steps."""
-        from architect.executor.engine import pipeline_ops
-        from architect.executor.engine.state import StateManager, StepStatus
+        from forge.executor.engine import pipeline_ops
+        from forge.executor.engine.state import StateManager, StepStatus
 
         mgr = self._make_state_with_statuses({
             "code": "complete", "build": "in_progress", "test": "pending",
@@ -2128,3 +2130,287 @@ class TestResetOrphanedInProgressSteps:
 
         assert state.steps["code"].status == StepStatus.COMPLETE
         assert state.steps["test"].status == StepStatus.PENDING
+
+
+# ── _set_hook_build_cmd ──────────────────────────────────────────────────
+
+class TestSetHookBuildCmd:
+    """Tests for FORGE_BUILD_CMD env var set by _set_hook_build_cmd."""
+
+    def setup_method(self):
+        from forge.executor.engine.registry import Preset, PipelineDefinition
+        self.preset = Preset(
+            name="test", version=1, description="test",
+            pipelines={"full": PipelineDefinition(steps=["code"], dependencies={})},
+            steps={},
+            models={},
+            build_command="cd {{REPO_ROOT}} && npm run build",
+            bazel_build_command="cd {{REPO_ROOT}} && bazel build {{BUILD_TARGETS}}",
+        )
+        self._orig = os.environ.get("FORGE_BUILD_CMD")
+
+    def teardown_method(self):
+        if self._orig is not None:
+            os.environ["FORGE_BUILD_CMD"] = self._orig
+        else:
+            os.environ.pop("FORGE_BUILD_CMD", None)
+
+    def _make_state(self, packages=None):
+        state = MagicMock()
+        state.affected_packages = packages or []
+        state.session_dir = "/tmp/test-session"
+        state.plan_file = ""
+        state.dev_server_port = 0
+        return state
+
+    @patch("forge.executor.driver.is_bazel_repo", return_value=False)
+    @patch("forge.executor.driver.build_context")
+    def test_sets_npm_build_for_non_bazel(self, mock_ctx, mock_bazel):
+        mock_ctx.return_value = {"REPO_ROOT": "/repo", "AFFECTED_PACKAGES": "(none)"}
+        state = self._make_state()
+
+        _set_hook_build_cmd(state, self.preset)
+
+        assert os.environ["FORGE_BUILD_CMD"] == "cd /repo && npm run build"
+
+    @patch("forge.executor.driver.is_bazel_repo", return_value=True)
+    @patch("forge.executor.driver.build_context")
+    def test_sets_bazel_build_with_packages(self, mock_ctx, mock_bazel):
+        mock_ctx.return_value = {"REPO_ROOT": "/repo", "AFFECTED_PACKAGES": "pkg/a, pkg/b"}
+        state = self._make_state(packages=["pkg/a", "pkg/b"])
+
+        _set_hook_build_cmd(state, self.preset)
+
+        assert os.environ["FORGE_BUILD_CMD"] == "cd /repo && bazel build //pkg/a/... //pkg/b/..."
+
+    @patch("forge.executor.driver.is_bazel_repo", return_value=True)
+    @patch("forge.executor.driver.build_context")
+    def test_skips_when_no_packages_and_template_needs_targets(self, mock_ctx, mock_bazel):
+        mock_ctx.return_value = {"REPO_ROOT": "/repo", "AFFECTED_PACKAGES": "(none)"}
+        os.environ.pop("FORGE_BUILD_CMD", None)
+        state = self._make_state()
+
+        _set_hook_build_cmd(state, self.preset)
+
+        assert "FORGE_BUILD_CMD" not in os.environ
+
+    @patch("forge.executor.driver.is_bazel_repo", return_value=False)
+    @patch("forge.executor.driver.build_context")
+    def test_no_env_var_when_no_build_command(self, mock_ctx, mock_bazel):
+        from forge.executor.engine.registry import Preset, PipelineDefinition
+        os.environ.pop("FORGE_BUILD_CMD", None)
+        preset = Preset(
+            name="test", version=1, description="test",
+            pipelines={"full": PipelineDefinition(steps=[], dependencies={})},
+            steps={},
+            models={},
+        )
+        state = self._make_state()
+
+        _set_hook_build_cmd(state, preset)
+
+        assert "FORGE_BUILD_CMD" not in os.environ
+
+
+# ── _set_hook_eslint_config ─────────────────────────────────────────────
+
+class TestSetHookEslintConfig:
+    """Tests for FORGE_ESLINT_CONFIG env var set by _set_hook_eslint_config."""
+
+    def setup_method(self):
+        self._orig = os.environ.get("FORGE_ESLINT_CONFIG")
+
+    def teardown_method(self):
+        if self._orig is not None:
+            os.environ["FORGE_ESLINT_CONFIG"] = self._orig
+        else:
+            os.environ.pop("FORGE_ESLINT_CONFIG", None)
+
+    def _make_preset(self, eslint_config=""):
+        from forge.executor.engine.registry import Preset, PipelineDefinition
+        return Preset(
+            name="test", version=1, description="test",
+            pipelines={"full": PipelineDefinition(steps=[], dependencies={})},
+            steps={}, models={}, eslint_config=eslint_config,
+        )
+
+    def test_sets_env_var_for_existing_config(self, tmp_path):
+        config = tmp_path / "eslint.config.mjs"
+        config.write_text("export default {};")
+        preset = self._make_preset(str(config))
+
+        _set_hook_eslint_config(preset)
+
+        assert os.environ["FORGE_ESLINT_CONFIG"] == str(config)
+
+    def test_resolves_relative_path(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        config = tmp_path / "tools" / "lint" / "eslint.config.mjs"
+        config.parent.mkdir(parents=True)
+        config.write_text("export default {};")
+        preset = self._make_preset("tools/lint/eslint.config.mjs")
+
+        _set_hook_eslint_config(preset)
+
+        assert os.environ["FORGE_ESLINT_CONFIG"] == str(config)
+
+    def test_skips_when_not_configured(self):
+        os.environ.pop("FORGE_ESLINT_CONFIG", None)
+        preset = self._make_preset()
+
+        _set_hook_eslint_config(preset)
+
+        assert "FORGE_ESLINT_CONFIG" not in os.environ
+
+    def test_skips_when_file_missing(self):
+        os.environ.pop("FORGE_ESLINT_CONFIG", None)
+        preset = self._make_preset("/nonexistent/eslint.config.mjs")
+
+        _set_hook_eslint_config(preset)
+
+        assert "FORGE_ESLINT_CONFIG" not in os.environ
+
+
+# ── _set_plugin_dir ─────────────────────────────────────────────────────
+
+class TestSetPluginDir:
+    """Tests for FORGE_PLUGIN_DIR env var set by _set_plugin_dir."""
+
+    def setup_method(self):
+        self._orig = os.environ.get("FORGE_PLUGIN_DIR")
+
+    def teardown_method(self):
+        if self._orig is not None:
+            os.environ["FORGE_PLUGIN_DIR"] = self._orig
+        else:
+            os.environ.pop("FORGE_PLUGIN_DIR", None)
+
+    def test_sets_env_var_when_skin_exists(self, tmp_path):
+        # Mirror real layout: <root>/src/forge/executor/driver.py
+        # 4 parents from driver.py → <root>
+        (tmp_path / "skins" / "claude-code" / "hooks").mkdir(parents=True)
+        driver_dir = tmp_path / "src" / "forge" / "executor"
+        driver_dir.mkdir(parents=True)
+        os.environ.pop("FORGE_PLUGIN_DIR", None)
+
+        import forge.executor.driver as drv
+        orig_file = drv.__file__
+        try:
+            drv.__file__ = str(driver_dir / "driver.py")
+            _set_plugin_dir()
+            assert os.environ["FORGE_PLUGIN_DIR"] == str(
+                tmp_path / "skins" / "claude-code"
+            )
+        finally:
+            drv.__file__ = orig_file
+
+    def test_no_env_var_when_skin_missing(self, tmp_path):
+        driver_dir = tmp_path / "src" / "forge" / "executor"
+        driver_dir.mkdir(parents=True)
+        os.environ.pop("FORGE_PLUGIN_DIR", None)
+
+        import forge.executor.driver as drv
+        orig_file = drv.__file__
+        try:
+            drv.__file__ = str(driver_dir / "driver.py")
+            _set_plugin_dir()
+            assert "FORGE_PLUGIN_DIR" not in os.environ
+        finally:
+            drv.__file__ = orig_file
+
+
+# ── ClaudeProvider --plugin-dir ─────────────────────────────────────────
+
+class TestClaudeProviderPluginDir:
+    """Tests that ClaudeProvider passes --plugin-dir from env var."""
+
+    def setup_method(self):
+        self._orig = os.environ.get("FORGE_PLUGIN_DIR")
+
+    def teardown_method(self):
+        if self._orig is not None:
+            os.environ["FORGE_PLUGIN_DIR"] = self._orig
+        else:
+            os.environ.pop("FORGE_PLUGIN_DIR", None)
+
+    @patch("forge.providers.claude.subprocess.Popen")
+    def test_includes_plugin_dir_when_set(self, mock_popen):
+        proc = MagicMock()
+        proc.stdout = iter([])
+        proc.returncode = 0
+        proc.wait.return_value = None
+        mock_popen.return_value = proc
+
+        os.environ["FORGE_PLUGIN_DIR"] = "/fake/skin"
+        from forge.providers.claude import ClaudeProvider
+        provider = ClaudeProvider(agent_command="claude")
+        provider.run_agent(prompt="test", model="sonnet", max_turns=1,
+                           cwd="/tmp", timeout_s=5)
+
+        cmd = mock_popen.call_args[0][0]
+        assert "--plugin-dir" in cmd
+        idx = cmd.index("--plugin-dir")
+        assert cmd[idx + 1] == "/fake/skin"
+
+    @patch("forge.providers.claude.subprocess.Popen")
+    def test_no_plugin_dir_when_unset(self, mock_popen):
+        proc = MagicMock()
+        proc.stdout = iter([])
+        proc.returncode = 0
+        proc.wait.return_value = None
+        mock_popen.return_value = proc
+
+        os.environ.pop("FORGE_PLUGIN_DIR", None)
+        from forge.providers.claude import ClaudeProvider
+        provider = ClaudeProvider(agent_command="claude")
+        provider.run_agent(prompt="test", model="sonnet", max_turns=1,
+                           cwd="/tmp", timeout_s=5)
+
+        cmd = mock_popen.call_args[0][0]
+        assert "--plugin-dir" not in cmd
+
+
+# ── _preflight_hooks ────────────────────────────────────────────────────
+
+class TestPreflightHooks:
+    """Tests for _preflight_hooks startup diagnostics."""
+
+    @patch("forge.executor.driver.shutil.which")
+    def test_warns_when_eslint_missing(self, mock_which, capsys):
+        mock_which.side_effect = lambda cmd: None
+        issues = _preflight_hooks()
+        out = capsys.readouterr().out
+        assert "eslint not found" in out
+        assert any("eslint" in i for i in issues)
+
+    @patch("forge.executor.driver.shutil.which")
+    def test_warns_when_prettier_missing(self, mock_which, capsys):
+        mock_which.side_effect = lambda cmd: "/usr/bin/eslint" if cmd == "eslint" else None
+        with patch("forge.executor.driver.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+            issues = _preflight_hooks()
+        out = capsys.readouterr().out
+        assert "prettier not found" in out
+        assert any("prettier" in i for i in issues)
+
+    @patch("forge.executor.driver.shutil.which")
+    def test_warns_no_eslint_config(self, mock_which, capsys):
+        mock_which.side_effect = lambda cmd: f"/usr/bin/{cmd}"
+        with patch("forge.executor.driver.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=1, stderr="eslint.config not found"
+            )
+            issues = _preflight_hooks()
+        out = capsys.readouterr().out
+        assert "eslint_config" in out
+        assert any("config" in i.lower() for i in issues)
+
+    @patch("forge.executor.driver.shutil.which")
+    def test_all_ok(self, mock_which, capsys):
+        mock_which.side_effect = lambda cmd: f"/usr/bin/{cmd}"
+        with patch("forge.executor.driver.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+            issues = _preflight_hooks()
+        out = capsys.readouterr().out
+        assert "eslint + prettier ready" in out
+        assert issues == []

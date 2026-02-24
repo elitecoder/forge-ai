@@ -7,7 +7,7 @@ import time
 import unittest
 from pathlib import Path
 
-from architect.core.session import list_sessions, cleanup_sessions
+from forge.core.session import list_sessions, cleanup_sessions
 
 
 class TestListSessions(unittest.TestCase):
@@ -26,12 +26,12 @@ class TestListSessions(unittest.TestCase):
         self.assertEqual(sessions, [])
 
     def test_list_sessions(self):
-        (self.sessions_base / "HZ-123_2026-01-01").mkdir()
-        (self.sessions_base / "HZ-456_2026-01-02").mkdir()
+        (self.sessions_base / "PROJ-123_2026-01-01").mkdir()
+        (self.sessions_base / "PROJ-456_2026-01-02").mkdir()
         sessions = list_sessions(self.sessions_base)
         self.assertEqual(len(sessions), 2)
         names = [s["name"] for s in sessions]
-        self.assertIn("HZ-123_2026-01-01", names)
+        self.assertIn("PROJ-123_2026-01-01", names)
 
     def test_list_ignores_files(self):
         (self.sessions_base / "session1").mkdir()

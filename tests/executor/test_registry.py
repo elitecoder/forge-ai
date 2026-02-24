@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from architect.executor.engine.registry import load_preset, get_model, Preset, StepDefinition
+from forge.executor.engine.registry import load_preset, get_model, Preset, StepDefinition
 
 
 class TestLoadPreset(unittest.TestCase):

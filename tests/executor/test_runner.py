@@ -9,18 +9,18 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 import subprocess
 
-from architect.executor.engine.runner import (
+from forge.executor.engine.runner import (
     execute_command, build_context, generate_fix_prompt, generate_ai_fix_prompt,
     StepResult, PIPELINE_CLI, _needs_shell, _select_command,
 )
-from architect.executor.engine.registry import StepDefinition, Preset
-from architect.executor.engine.state import PipelineState, StepState
+from forge.executor.engine.registry import StepDefinition, Preset
+from forge.executor.engine.state import PipelineState, StepState
 from tests.executor.helpers import make_state, make_preset
 
 
 class TestBuildContext(unittest.TestCase):
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="file.ts")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="file.ts")
     def test_basic_context(self, _cf, _rr):
         state = make_state(session_dir="/session")
         preset = make_preset()
@@ -30,8 +30,8 @@ class TestBuildContext(unittest.TestCase):
         self.assertIn("PIPELINE_CLI", ctx)
         self.assertEqual(ctx["CHANGED_FILES"], "file.ts")
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_package_context(self, _cf, _rr):
         state = make_state(packages=["apps/webapp"])
         preset = make_preset()
@@ -39,25 +39,25 @@ class TestBuildContext(unittest.TestCase):
         self.assertEqual(ctx["PACKAGE"], "apps/webapp")
         self.assertEqual(ctx["PACKAGE_SLUG"], "apps-webapp")
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_invalid_package_raises(self, _cf, _rr):
         state = make_state()
         preset = make_preset()
         with self.assertRaises(ValueError):
             build_context(state, preset, package="pkg; rm -rf /")
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_valid_package_names(self, _cf, _rr):
         state = make_state()
         preset = make_preset()
-        for valid in ["apps/webapp", "platform/ui", "@hz/test-tools", "my_pkg.v2"]:
+        for valid in ["apps/webapp", "platform/ui", "@example/test-tools", "my_pkg.v2"]:
             ctx = build_context(state, preset, package=valid)
             self.assertEqual(ctx["PACKAGE"], valid)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_no_packages_shows_none(self, _cf, _rr):
         state = make_state(packages=[])
         preset = make_preset()
@@ -74,8 +74,8 @@ class TestExecuteCommand(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/tmp")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/tmp")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_successful_command(self, _cf, _rr):
         step = StepDefinition(name="test_step", run_command="echo hello")
         state = make_state(session_dir=self.session_dir)
@@ -84,8 +84,8 @@ class TestExecuteCommand(unittest.TestCase):
         self.assertTrue(result.passed)
         self.assertIn("hello", result.output)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/tmp")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/tmp")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_failing_command(self, _cf, _rr):
         step = StepDefinition(name="test_step", run_command="exit 1")
         state = make_state(session_dir=self.session_dir)
@@ -93,8 +93,8 @@ class TestExecuteCommand(unittest.TestCase):
         result = execute_command(step, state, preset)
         self.assertFalse(result.passed)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/tmp")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/tmp")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_error_file_written(self, _cf, _rr):
         step = StepDefinition(name="test_step", run_command="echo ERR >&2; exit 1",
                               error_file="errors.txt")
@@ -104,8 +104,8 @@ class TestExecuteCommand(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertTrue(os.path.isfile(result.error_file))
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/tmp")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/tmp")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_timeout(self, _cf, _rr):
         step = StepDefinition(name="test_step", run_command="sleep 60", timeout=1)
         state = make_state(session_dir=self.session_dir)
@@ -114,8 +114,8 @@ class TestExecuteCommand(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertIn("timed out", result.output)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/tmp")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/tmp")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_per_package_no_packages(self, _cf, _rr):
         step = StepDefinition(name="lint", run_command="echo ok", per_package=True)
         state = make_state(packages=[])
@@ -132,8 +132,8 @@ class TestGenerateFixPrompt(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_fix_prompt_contains_protocol(self, _cf, _rr):
         step = StepDefinition(name="build", run_command="bazel build :tsc")
         state = make_state(session_dir=self.tmp)
@@ -142,8 +142,8 @@ class TestGenerateFixPrompt(unittest.TestCase):
         self.assertIn("Pipeline Protocol", prompt)
         self.assertIn("build", prompt)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_fix_prompt_references_error_file(self, _cf, _rr):
         error_path = Path(self.tmp, "errors.txt")
         error_path.write_text("error: missing import\n")
@@ -155,8 +155,8 @@ class TestGenerateFixPrompt(unittest.TestCase):
         self.assertIn("Read this file", prompt)
         self.assertNotIn("error: missing import", prompt)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_fix_prompt_with_hints(self, _cf, _rr):
         step = StepDefinition(name="build", run_command="bazel build",
                               fix_hints="Check BUILD files")
@@ -167,8 +167,8 @@ class TestGenerateFixPrompt(unittest.TestCase):
 
 
 class TestGenerateAiFixPrompt(unittest.TestCase):
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_ai_fix_prompt(self, _cf, _rr):
         step = StepDefinition(name="code_review", step_type="ai")
         state = make_state(session_dir="/session")
@@ -177,8 +177,8 @@ class TestGenerateAiFixPrompt(unittest.TestCase):
         self.assertIn("fix ALL issues", prompt)
         self.assertIn("/session", prompt)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_ai_fix_prompt_resolves_preset_dir_in_skill(self, _cf, _rr):
         """Regression: ${PRESET_DIR} in skill paths must be resolved."""
         tmp = tempfile.mkdtemp(prefix="fix_skill_test_")
@@ -200,11 +200,11 @@ class TestGenerateAiFixPrompt(unittest.TestCase):
 
 
 class TestGenerateAiPrompt(unittest.TestCase):
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_resolves_preset_dir_in_skill(self, _cf, _rr):
         """Regression: ${PRESET_DIR} in skill paths must be resolved."""
-        from architect.executor.engine.runner import generate_ai_prompt
+        from forge.executor.engine.runner import generate_ai_prompt
 
         tmp = tempfile.mkdtemp(prefix="ai_skill_test_")
         try:
@@ -223,11 +223,11 @@ class TestGenerateAiPrompt(unittest.TestCase):
         finally:
             shutil.rmtree(tmp)
 
-    @patch("architect.executor.engine.runner.repo_root", return_value="/repo")
-    @patch("architect.executor.engine.runner._changed_files", return_value="")
+    @patch("forge.executor.engine.runner.repo_root", return_value="/repo")
+    @patch("forge.executor.engine.runner._changed_files", return_value="")
     def test_unresolved_preset_dir_raises(self, _cf, _rr):
         """${PRESET_DIR} pointing to missing file should raise FileNotFoundError."""
-        from architect.executor.engine.runner import generate_ai_prompt
+        from forge.executor.engine.runner import generate_ai_prompt
 
         step = StepDefinition(
             name="code_review", step_type="ai",
@@ -280,19 +280,19 @@ class TestNeedsShell(unittest.TestCase):
 class TestSelectCommand(unittest.TestCase):
     """Bug 4+6 regression: _select_command picks bazel_run_command in Bazel repos."""
 
-    @patch("architect.executor.engine.runner.is_bazel_repo", return_value=True)
+    @patch("forge.executor.engine.runner.is_bazel_repo", return_value=True)
     def test_returns_bazel_command_in_bazel_repo(self, _):
         step = StepDefinition(name="build", run_command="npm run build",
                               bazel_run_command="bazel build :tsc")
         self.assertEqual(_select_command(step), "bazel build :tsc")
 
-    @patch("architect.executor.engine.runner.is_bazel_repo", return_value=False)
+    @patch("forge.executor.engine.runner.is_bazel_repo", return_value=False)
     def test_returns_run_command_outside_bazel_repo(self, _):
         step = StepDefinition(name="build", run_command="npm run build",
                               bazel_run_command="bazel build :tsc")
         self.assertEqual(_select_command(step), "npm run build")
 
-    @patch("architect.executor.engine.runner.is_bazel_repo", return_value=True)
+    @patch("forge.executor.engine.runner.is_bazel_repo", return_value=True)
     def test_returns_run_command_when_bazel_command_empty(self, _):
         step = StepDefinition(name="lint", run_command="npm run lint")
         self.assertEqual(_select_command(step), "npm run lint")

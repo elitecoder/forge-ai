@@ -16,12 +16,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock, PropertyMock
 
-from architect.executor.engine.state import PipelineState, StepState, StepStatus, StateManager, _state_to_dict
-from architect.executor.engine.registry import (
+from forge.executor.engine.state import PipelineState, StepState, StepStatus, StateManager, _state_to_dict
+from forge.executor.engine.registry import (
     Preset, StepDefinition, EvidenceRule, PipelineDefinition, load_preset,
 )
-from architect.executor.engine.evidence import EvidenceResult
-from architect.executor.engine.runner import StepResult
+from forge.executor.engine.evidence import EvidenceResult
+from forge.executor.engine.runner import StepResult
 
 
 def _make_state(step_order, dependency_graph=None, statuses=None):
@@ -40,8 +40,8 @@ def _make_state(step_order, dependency_graph=None, statuses=None):
 
 
 # Import after path setup
-from architect.executor import commands as pipeline_cli
-from architect.executor.commands import _check_dependencies
+from forge.executor import commands as pipeline_cli
+from forge.executor.commands import _check_dependencies
 
 
 # -- Fixtures ----------------------------------------------------------------
@@ -106,6 +106,7 @@ class CLITestBase:
             patch.object(pipeline_cli, "SESSIONS_BASE", self.sessions_base),
             patch.object(pipeline_cli, "REPO_ROOT", self.tmp),
             patch.object(pipeline_cli, "PRESETS_DIR", self.presets_dir),
+            patch("forge.executor.engine.pipeline_ops.presets_dir", return_value=self.presets_dir),
         ]
         for p in self._patches:
             p.start()
@@ -136,6 +137,7 @@ class CLITestBase:
             phase="execution",
             pipeline=pipeline,
             preset=preset,
+            preset_path=str(self.preset_dir),
             current_step=step_order[0],
             steps=steps,
             step_order=list(step_order),
@@ -604,7 +606,7 @@ class TestCmdExecute(CLITestBase):
             dep_graph={"lint": ["build"]},
         )
         with patch.object(pipeline_cli, "execute_command") as mock_exec:
-            from architect.executor.engine.runner import StepResult
+            from forge.executor.engine.runner import StepResult
             mock_exec.return_value = StepResult(passed=True, output="ok")
             args = argparse.Namespace(step="lint")
             pipeline_cli.cmd_execute(args)
@@ -616,7 +618,7 @@ class TestCmdExecute(CLITestBase):
     def test_failed_execution_with_error_file(self, capsys):
         self._make_pipeline_state(dep_graph={})
         with patch.object(pipeline_cli, "execute_command") as mock_exec:
-            from architect.executor.engine.runner import StepResult
+            from forge.executor.engine.runner import StepResult
             mock_exec.return_value = StepResult(
                 passed=False, output="error output",
                 error_file="/tmp/errors.txt",
@@ -632,7 +634,7 @@ class TestCmdExecute(CLITestBase):
     def test_failed_execution_with_failed_packages(self, capsys):
         self._make_pipeline_state(dep_graph={})
         with patch.object(pipeline_cli, "execute_command") as mock_exec:
-            from architect.executor.engine.runner import StepResult
+            from forge.executor.engine.runner import StepResult
             mock_exec.return_value = StepResult(
                 passed=False, output="pkg fail",
                 failed_packages=["pkg-a"],
@@ -649,9 +651,9 @@ class TestCmdExecute(CLITestBase):
     def test_evidence_check_failure(self, capsys):
         self._make_pipeline_state(dep_graph={})
         with patch.object(pipeline_cli, "execute_command") as mock_exec:
-            from architect.executor.engine.runner import StepResult
+            from forge.executor.engine.runner import StepResult
             mock_exec.return_value = StepResult(passed=True, output="ok")
-            with patch("architect.executor.commands.EvidenceChecker") as mock_checker_cls:
+            with patch("forge.executor.commands.EvidenceChecker") as mock_checker_cls:
                 mock_checker = MagicMock()
                 mock_checker.check.return_value = EvidenceResult(
                     passed=False, message="Missing build-output.txt",
@@ -793,7 +795,7 @@ class TestCmdPass(CLITestBase):
 
     def test_evidence_failure_exits(self):
         self._make_pipeline_state(dep_graph={})
-        with patch("architect.executor.commands.EvidenceChecker") as mock_cls:
+        with patch("forge.executor.commands.EvidenceChecker") as mock_cls:
             mock_checker = MagicMock()
             mock_checker.check.return_value = EvidenceResult(
                 passed=False, message="Missing file",
@@ -834,7 +836,7 @@ class TestCmdPass(CLITestBase):
             dep_graph={"lint": ["build"]},
         )
         # Write a build checkpoint so there's something to reset
-        from architect.executor.engine.checkpoint import write_checkpoint
+        from forge.executor.engine.checkpoint import write_checkpoint
         write_checkpoint(self.checkpoint_dir, "build", "full", None)
 
         # Set lint retries > 0 so revalidation triggers
@@ -935,7 +937,7 @@ class TestCmdAddPackages(CLITestBase):
 class TestCmdVerify(CLITestBase):
     def test_all_valid(self, capsys):
         self._make_pipeline_state()
-        with patch("architect.executor.commands.verify_all_checkpoints") as mock_verify:
+        with patch("forge.executor.commands.verify_all_checkpoints") as mock_verify:
             mock_verify.return_value = (True, ["build", "lint"], [])
             args = argparse.Namespace()
             pipeline_cli.cmd_verify(args)
@@ -944,7 +946,7 @@ class TestCmdVerify(CLITestBase):
 
     def test_missing_checkpoints_exits(self, capsys):
         self._make_pipeline_state()
-        with patch("architect.executor.commands.verify_all_checkpoints") as mock_verify:
+        with patch("forge.executor.commands.verify_all_checkpoints") as mock_verify:
             mock_verify.return_value = (False, ["build"], ["lint"])
             args = argparse.Namespace()
             with pytest.raises(SystemExit):
@@ -977,14 +979,14 @@ class TestCmdModel(CLITestBase):
 
 class TestCmdCleanup(CLITestBase):
     def test_cleanup_no_removals(self, capsys):
-        with patch("architect.executor.commands._core_cleanup_sessions", return_value=[]):
+        with patch("forge.executor.commands._core_cleanup_sessions", return_value=[]):
             args = argparse.Namespace(older_than=7)
             pipeline_cli.cmd_cleanup(args)
         out = capsys.readouterr().out
         assert "No sessions to clean up" in out
 
     def test_cleanup_with_removals(self, capsys):
-        with patch("architect.executor.commands._core_cleanup_sessions", return_value=["/tmp/old-session"]):
+        with patch("forge.executor.commands._core_cleanup_sessions", return_value=["/tmp/old-session"]):
             args = argparse.Namespace(older_than=7)
             pipeline_cli.cmd_cleanup(args)
         out = capsys.readouterr().out
@@ -996,7 +998,7 @@ class TestCmdCleanup(CLITestBase):
 
 class TestCmdSessions:
     def test_no_sessions(self, capsys):
-        with patch("architect.executor.commands._core_list_sessions", return_value=[]):
+        with patch("forge.executor.commands._core_list_sessions", return_value=[]):
             args = argparse.Namespace()
             pipeline_cli.cmd_sessions(args)
         out = capsys.readouterr().out
@@ -1006,7 +1008,7 @@ class TestCmdSessions:
         sessions = [
             {"name": "PROJ-123_2026-01-01", "path": "/tmp/sessions/PROJ-123", "age_days": 2.0},
         ]
-        with patch("architect.executor.commands._core_list_sessions", return_value=sessions):
+        with patch("forge.executor.commands._core_list_sessions", return_value=sessions):
             args = argparse.Namespace()
             pipeline_cli.cmd_sessions(args)
         out = capsys.readouterr().out
@@ -1094,13 +1096,13 @@ class TestCmdDevServer(CLITestBase):
 
 class TestMain(CLITestBase):
     def test_no_command_exits(self):
-        with patch("sys.argv", ["architect-executor"]):
+        with patch("sys.argv", ["forge-executor"]):
             with pytest.raises(SystemExit):
                 pipeline_cli.main()
 
     def test_status_command_dispatch(self, capsys):
         self._make_pipeline_state()
-        with patch("sys.argv", ["architect-executor", "status"]):
+        with patch("sys.argv", ["forge-executor", "status"]):
             pipeline_cli.main()
         out = capsys.readouterr().out
         data = json.loads(out)
@@ -1108,7 +1110,7 @@ class TestMain(CLITestBase):
 
     def test_next_command_dispatch(self, capsys):
         self._make_pipeline_state(dep_graph={})
-        with patch("sys.argv", ["architect-executor", "next"]):
+        with patch("sys.argv", ["forge-executor", "next"]):
             pipeline_cli.main()
         out = capsys.readouterr().out
         data = json.loads(out)
@@ -1116,7 +1118,7 @@ class TestMain(CLITestBase):
 
     def test_run_command_dispatch(self, capsys):
         self._make_pipeline_state(dep_graph={})
-        with patch("sys.argv", ["architect-executor", "run", "build"]):
+        with patch("sys.argv", ["forge-executor", "run", "build"]):
             pipeline_cli.main()
         out = capsys.readouterr().out
         assert "in_progress" in out
@@ -1126,14 +1128,14 @@ class TestMain(CLITestBase):
             statuses={"build": StepStatus.COMPLETE},
             dep_graph={"lint": ["build"]},
         )
-        with patch("sys.argv", ["architect-executor", "pass", "lint"]):
+        with patch("sys.argv", ["forge-executor", "pass", "lint"]):
             pipeline_cli.main()
         out = capsys.readouterr().out
         assert "complete" in out
 
     def test_fail_command_dispatch(self, capsys):
         self._make_pipeline_state(dep_graph={})
-        with patch("sys.argv", ["architect-executor", "fail", "build", "error msg"]):
+        with patch("sys.argv", ["forge-executor", "fail", "build", "error msg"]):
             pipeline_cli.main()
         out = capsys.readouterr().out
         data = json.loads(out)
@@ -1141,43 +1143,43 @@ class TestMain(CLITestBase):
 
     def test_reset_command_dispatch(self, capsys):
         self._make_pipeline_state(statuses={"build": StepStatus.FAILED})
-        with patch("sys.argv", ["architect-executor", "reset", "build"]):
+        with patch("sys.argv", ["forge-executor", "reset", "build"]):
             pipeline_cli.main()
         out = capsys.readouterr().out
         assert "reset to pending" in out
 
     def test_verify_command_dispatch(self, capsys):
         self._make_pipeline_state()
-        with patch("architect.executor.commands.verify_all_checkpoints", return_value=(True, ["build", "lint"], [])):
-            with patch("sys.argv", ["architect-executor", "verify"]):
+        with patch("forge.executor.commands.verify_all_checkpoints", return_value=(True, ["build", "lint"], [])):
+            with patch("sys.argv", ["forge-executor", "verify"]):
                 pipeline_cli.main()
         out = capsys.readouterr().out
         assert "PIPELINE COMPLETE" in out
 
     def test_model_command_dispatch(self, capsys):
         self._make_pipeline_state()
-        with patch("sys.argv", ["architect-executor", "model", "code_review", "run"]):
+        with patch("sys.argv", ["forge-executor", "model", "code_review", "run"]):
             pipeline_cli.main()
         out = capsys.readouterr().out.strip()
         assert out == "opus"
 
     def test_sessions_command_dispatch(self, capsys):
-        with patch("architect.executor.commands._core_list_sessions", return_value=[]):
-            with patch("sys.argv", ["architect-executor", "sessions"]):
+        with patch("forge.executor.commands._core_list_sessions", return_value=[]):
+            with patch("sys.argv", ["forge-executor", "sessions"]):
                 pipeline_cli.main()
         out = capsys.readouterr().out
         assert "No pipeline sessions found" in out
 
     def test_add_packages_command_dispatch(self, capsys):
         self._make_pipeline_state()
-        with patch("sys.argv", ["architect-executor", "add-packages", "new-pkg"]):
+        with patch("sys.argv", ["forge-executor", "add-packages", "new-pkg"]):
             pipeline_cli.main()
         out = capsys.readouterr().out
         assert "new-pkg" in out
 
     def test_cleanup_command_dispatch(self, capsys):
-        with patch("architect.executor.commands._core_cleanup_sessions", return_value=[]):
-            with patch("sys.argv", ["architect-executor", "cleanup"]):
+        with patch("forge.executor.commands._core_cleanup_sessions", return_value=[]):
+            with patch("sys.argv", ["forge-executor", "cleanup"]):
                 pipeline_cli.main()
         out = capsys.readouterr().out
         assert "No sessions to clean up" in out
@@ -1185,7 +1187,7 @@ class TestMain(CLITestBase):
     def test_init_command_dispatch(self, capsys):
         with patch.object(pipeline_cli, "_is_worktree", return_value=(True, "/some/path")):
             with patch.object(pipeline_cli, "_session_name", return_value="test_2026-01-01"):
-                with patch("sys.argv", ["architect-executor", "init", "full", "--preset", "test-preset"]):
+                with patch("sys.argv", ["forge-executor", "init", "full", "--preset", "test-preset"]):
                     pipeline_cli.main()
         out = capsys.readouterr().out
         assert "Pipeline initialized" in out
@@ -1193,7 +1195,7 @@ class TestMain(CLITestBase):
     def test_dev_server_command_dispatch(self, capsys):
         self._make_pipeline_state(dev_server_port=0)
         with patch.object(pipeline_cli, "_find_free_port", return_value=8080):
-            with patch("sys.argv", ["architect-executor", "dev-server", "allocate"]):
+            with patch("sys.argv", ["forge-executor", "dev-server", "allocate"]):
                 pipeline_cli.main()
         out = json.loads(capsys.readouterr().out)
         assert out["port"] == 8080
@@ -1208,7 +1210,7 @@ class TestMain(CLITestBase):
         }
         _make_manifest_dir(self.presets_dir, pipelines=pipelines_m, steps=steps_m)
         self._make_pipeline_state(dep_graph={"lint": ["build"]})
-        with patch("sys.argv", ["architect-executor", "dispatch", "build", "fix"]):
+        with patch("sys.argv", ["forge-executor", "dispatch", "build", "fix"]):
             pipeline_cli.main()
         out = json.loads(capsys.readouterr().out)
         assert out["phase"] == "fix"
@@ -1220,9 +1222,9 @@ class TestMain(CLITestBase):
             dep_graph={"lint": ["build"]},
         )
         with patch.object(pipeline_cli, "execute_command") as mock_exec:
-            from architect.executor.engine.runner import StepResult
+            from forge.executor.engine.runner import StepResult
             mock_exec.return_value = StepResult(passed=True, output="ok")
-            with patch("sys.argv", ["architect-executor", "execute", "lint"]):
+            with patch("sys.argv", ["forge-executor", "execute", "lint"]):
                 pipeline_cli.main()
         out = capsys.readouterr().out
         lines = [l for l in out.strip().split("\n") if l.startswith("{")]

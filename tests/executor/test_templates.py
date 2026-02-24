@@ -3,7 +3,7 @@
 
 import unittest
 
-from architect.executor.engine.templates import render
+from forge.executor.engine.templates import render
 
 
 class TestRender(unittest.TestCase):

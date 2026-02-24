@@ -7,11 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from architect.executor.engine.state import StateManager, PipelineState, StepState, StepStatus
-from architect.executor.engine.checkpoint import write_checkpoint
+from forge.executor.engine.state import StateManager, PipelineState, StepState, StepStatus
+from forge.executor.engine.checkpoint import write_checkpoint
 from tests.executor.helpers import make_state, save_state
 
-from architect.executor import pre_pr_gate
+from forge.executor import pre_pr_gate
 
 
 class TestPrePrGate(unittest.TestCase):
