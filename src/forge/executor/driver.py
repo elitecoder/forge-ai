@@ -50,48 +50,34 @@ def _set_plugin_dir() -> None:
         os.environ["FORGE_PLUGIN_DIR"] = str(skin)
 
 
-def _preflight_hooks() -> list[str]:
-    """Check that lint/format tools are available. Returns list of issues."""
-    issues: list[str] = []
+def _preflight_hooks() -> None:
+    """Verify lint/format tools are installed. Exits on failure."""
+    missing = [name for name in ("eslint", "prettier") if not shutil.which(name)]
+    if missing:
+        _safe_print(f"  {RED}Hooks: FATAL — missing: {', '.join(missing)}{RESET}")
+        _safe_print(f"  Run: npm install -g {' '.join(missing)}")
+        sys.exit(1)
 
-    eslint = shutil.which("eslint")
-    if not eslint:
-        issues.append("eslint not found — lint hook will not run. Fix: npm install -g eslint")
-
-    # Check if eslint can find a config in the current repo
-    if eslint and not os.environ.get("FORGE_ESLINT_CONFIG"):
+    # Check if eslint can find a config in the current repo (warning only)
+    if not os.environ.get("FORGE_ESLINT_CONFIG"):
         try:
             result = subprocess.run(
                 ["eslint", "--print-config", "x.ts"],
                 capture_output=True, text=True, timeout=5,
             )
-            # Exit code 1+ means config not found. Use more robust pattern matching.
             if result.returncode != 0:
                 stderr_str = result.stderr if isinstance(result.stderr, str) else ""
                 stdout_str = result.stdout if isinstance(result.stdout, str) else ""
                 output = stderr_str + stdout_str
-                # Match common eslint config error patterns
                 if re.search(r"(eslint\.config|config.*not found|no.*config)", output, re.IGNORECASE):
-                    issues.append(
-                        "eslint cannot find config for this repo. "
+                    _safe_print(
+                        f"  {YELLOW}Hooks:{RESET} eslint cannot find config for this repo. "
                         "Add \"eslint_config\" to your preset manifest"
                     )
         except Exception:
             pass
 
-    prettier = shutil.which("prettier")
-    if not prettier:
-        issues.append("prettier not found — format hook will not run. Fix: npm install -g prettier")
-
-    if not issues:
-        _safe_print(f"  {GREEN}Hooks:{RESET} eslint + prettier ready")
-    else:
-        _safe_print(f"  {YELLOW}Hooks:{RESET}")
-        for issue in issues:
-            _safe_print(f"    {YELLOW}!{RESET} {issue}")
-        _safe_print()
-
-    return issues
+    _safe_print(f"  {GREEN}Hooks:{RESET} eslint + prettier ready")
 
 
 def _set_hook_build_cmd(state: PipelineState, preset) -> None:
@@ -1426,17 +1412,28 @@ def main():
     _set_driver_pid()
     _write_status(session_dir)
 
-    # Set eslint config from preset before preflight checks
+    # Auto-run setup on first use (installs eslint/prettier if missing)
+    from forge.setup import check_setup, run_setup, run_preset_setup
+    if not check_setup():
+        _safe_print(f"  {DIM}Running first-time setup...{RESET}")
+        try:
+            run_setup()
+        except RuntimeError as e:
+            _safe_print(f"  {RED}Setup failed:{RESET} {e}")
+            sys.exit(1)
+
+    # Set eslint config from preset and run preset-specific setup
     try:
         _init_preset = pipeline_ops.load_preset_for_state(pipeline_ops.require_state())
         _set_hook_eslint_config(_init_preset)
+        run_preset_setup(str(_init_preset.preset_dir))
+    except RuntimeError as e:
+        _safe_print(f"  {RED}Preset setup failed:{RESET} {e}")
+        sys.exit(1)
     except Exception:
         pass
 
-    hook_issues = _preflight_hooks()
-    if hook_issues:
-        for issue in hook_issues:
-            log_activity(_activity_log_path, "hooks", issue)
+    _preflight_hooks()
     _start_status_updater(session_dir)
 
     pipeline_start = time.time()

@@ -19,6 +19,7 @@ from forge.planner.engine.state import (
     StateManager,
     now_iso,
 )
+from forge.planner.commands import resolve_skill_dir
 from forge.providers.protocol import AgentResult, Provider
 
 
@@ -26,11 +27,11 @@ MAX_RETRIES = 2
 
 # Map agent_type to prompt template filename and allowed tools (from frontmatter)
 _AGENT_TYPE_PROMPTS: dict[str, tuple[str, str]] = {
-    "planner-architect-topdown":  ("architect-topdown.md", "Read Write Glob Grep"),
-    "planner-architect-bottomup": ("architect-bottomup.md", "Read Write Glob Grep"),
-    "planner-critic":             ("critic.md",            "Read Write"),
-    "planner-refiner":            ("refiner.md",           "Read Write"),
-    "planner-judge":              ("judge.md",             "Read Write"),
+    "planner-architect-topdown":  ("architect-topdown.md", ""),
+    "planner-architect-bottomup": ("architect-bottomup.md", ""),
+    "planner-critic":             ("critic.md",            ""),
+    "planner-refiner":            ("refiner.md",           ""),
+    "planner-judge":              ("judge.md",             ""),
 }
 
 PHASE_MODELS = {
@@ -49,6 +50,15 @@ PHASE_MAX_TURNS = {
     "refiners": 200,
     "judge": 200,
     "enrichment": 200,
+}
+
+PHASE_TIMEOUT_S = {
+    "recon": 900,
+    "architects": 900,
+    "critics": 600,
+    "refiners": 600,
+    "judge": 600,
+    "enrichment": 600,
 }
 
 # Agent definitions per phase: name, output file, agent_type, optional id
@@ -324,16 +334,24 @@ class PlannerDriver:
             self._dispatch_enrichment(state)
         else:
             agents = PHASE_AGENTS.get(phase, [])
-            if len(agents) > 1 and self.workers > 1:
+            # Only run agents whose output files are missing (skip already-complete on retry)
+            agents_to_run = [
+                ad for ad in agents
+                if not os.path.isfile(os.path.join(self.session_dir, ad.get("output", "")))
+            ]
+            if not agents_to_run:
+                agents_to_run = agents  # First run: run all
+
+            if len(agents_to_run) > 1 and self.workers > 1:
                 with ThreadPoolExecutor(max_workers=self.workers) as pool:
                     futures = {
                         pool.submit(self._run_agent, phase, ad, state): ad
-                        for ad in agents
+                        for ad in agents_to_run
                     }
                     for f in as_completed(futures):
                         f.result()
             else:
-                for agent_def in agents:
+                for agent_def in agents_to_run:
                     self._run_agent(phase, agent_def, state)
 
         elapsed = time.monotonic() - phase_start
@@ -370,6 +388,7 @@ class PlannerDriver:
     def _run_agent(self, phase: str, agent_def: dict, state: PlannerState) -> AgentResult:
         model = _resolve_model(phase, state.fast_mode)
         max_turns = PHASE_MAX_TURNS.get(phase, 200)
+        timeout_s = PHASE_TIMEOUT_S.get(phase, 900)
         prompt = self._build_phase_prompt(phase, agent_def, state)
         step_name = agent_def["name"]
         cwd = state.repo_dir or self.repo_dir
@@ -387,6 +406,7 @@ class PlannerDriver:
             model=model,
             max_turns=max_turns,
             cwd=cwd,
+            timeout_s=timeout_s,
             step_name=step_name,
             session_dir=self.session_dir,
             activity_log_path=_activity_log(self.session_dir),
@@ -394,7 +414,7 @@ class PlannerDriver:
             allowed_tools=allowed_tools,
         )
         if result.timed_out:
-            _log_activity(self.session_dir, f"WARNING: agent {step_name} timed out")
+            _log_activity(self.session_dir, f"WARNING: agent {step_name} timed out after {timeout_s}s")
         return result
 
     def _dispatch_enrichment(self, state: PlannerState) -> None:
@@ -407,9 +427,14 @@ class PlannerDriver:
 
         for plugin in plugins:
             skill_name = plugin.get("skill", "")
+            skill_dir = resolve_skill_dir(skill_name, state.preset_path)
+            if skill_dir is None:
+                continue
             output_suffix = plugin.get("output_suffix", skill_name)
             prompt = (
                 f"Enrichment task for skill '{skill_name}'.\n"
+                f"Skill directory: {skill_dir}\n"
+                f"Read the skill at: {skill_dir}/SKILL.md\n"
                 f"Session: {self.session_dir}\n"
                 f"Problem: {state.problem_statement}\n"
                 f"Write output to: {self.session_dir}/{output_suffix}.md"

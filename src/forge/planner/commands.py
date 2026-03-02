@@ -27,9 +27,31 @@ SESSIONS_BASE = _CORE_SESSIONS_BASE / "planner"
 
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
-SKILLS_BASE = Path(os.environ.get("FORGE_SKILLS_BASE", str(Path.home() / ".claude" / "skills")))
 
 MAX_RETRIES = 2
+
+
+def resolve_skill_dir(skill_name: str, preset_path: str) -> Path | None:
+    """Resolve skill dir: user override > bundled in preset > env fallback."""
+    # 1. User override (~/.claude/skills/)
+    user_dir = Path.home() / ".claude" / "skills" / skill_name
+    if (user_dir / "SKILL.md").is_file():
+        return user_dir
+
+    # 2. Bundled in preset
+    if preset_path:
+        bundled = Path(preset_path) / "bundled-skills" / skill_name
+        if (bundled / "SKILL.md").is_file():
+            return bundled
+
+    # 3. Env var fallback
+    env_base = os.environ.get("FORGE_SKILLS_BASE")
+    if env_base:
+        candidate = Path(env_base) / skill_name
+        if (candidate / "SKILL.md").is_file():
+            return candidate
+
+    return None
 
 # ── Model resolution ────────────────────────────────────────────────────────
 
@@ -384,8 +406,8 @@ def _dispatch_enrichment(state: PlannerState, max_turns: int) -> list[dict]:
 
     for plugin in plugins:
         skill_name = plugin.get("skill", "")
-        skill_dir = SKILLS_BASE / skill_name
-        if not (skill_dir / "SKILL.md").is_file():
+        skill_dir = resolve_skill_dir(skill_name, state.preset_path)
+        if skill_dir is None:
             continue
 
         plugin_model = "sonnet" if state.fast_mode else plugin.get("model", "sonnet")
@@ -394,6 +416,7 @@ def _dispatch_enrichment(state: PlannerState, max_turns: int) -> list[dict]:
         template = _read_template("enrichment.md")
         prompt = _substitute_prompt(template, state, {"id": "", "output": f"{output_suffix}.md"})
         prompt = prompt.replace("{{SKILL_NAME}}", skill_name)
+        prompt = prompt.replace("{{SKILL_DIR}}", str(skill_dir))
         prompt = prompt.replace("{{OUTPUT_SUFFIX}}", output_suffix)
 
         agents.append({
@@ -643,6 +666,10 @@ def cmd_drive(args):
         constraint_a=args.constraint_a or "",
         constraint_b=args.constraint_b or "",
     )
+    if result is None:
+        print("ERROR: Planner did not produce a final plan.", file=sys.stderr)
+        print(f"Session: {session_dir}")
+        sys.exit(1)
     print(f"Plan: {result}")
     print(f"Session: {session_dir}")
 

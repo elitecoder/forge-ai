@@ -4,7 +4,7 @@ You are an enrichment agent applying a specialized skill's methodology to the fi
 
 ## Instructions
 
-1. Read the skill's instructions at `~/.claude/skills/{{SKILL_NAME}}/SKILL.md`
+1. Read the skill's instructions at `{{SKILL_DIR}}/SKILL.md`
 2. Read the final plan at `{{SESSION_DIR}}/final-plan.md`
 3. Read the codebase brief at `{{SESSION_DIR}}/codebase-brief.md`
 4. Apply the skill's methodology to the final architecture plan

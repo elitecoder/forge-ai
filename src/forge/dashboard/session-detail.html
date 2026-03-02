@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forge Session Detail</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+
+        .header-buttons {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .header-button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+
+        .header-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .header-button.danger {
+            background: rgba(239, 68, 68, 0.3);
+            border-color: rgba(239, 68, 68, 0.5);
+        }
+
+        .header-button.danger:hover {
+            background: rgba(239, 68, 68, 0.5);
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 1.1em;
+            color: #666;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #10b981;
+            color: white;
+            font-size: 0.7em;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .problem-statement {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 20px;
+        }
+
+        .meta-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .meta-item {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .meta-item .label {
+            font-size: 0.8em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+
+        .meta-item .value {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .phases {
+            display: grid;
+            gap: 15px;
+        }
+
+        .phase {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #f0f0f0;
+            transition: all 0.3s ease;
+        }
+
+        .phase.complete {
+            background: #f0fdf4;
+            border-color: #86efac;
+        }
+
+        .phase.in_progress {
+            background: #fffbeb;
+            border-color: #fcd34d;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .phase.failed {
+            background: #fef2f2;
+            border-color: #fca5a5;
+        }
+
+        .phase.pending {
+            background: #f8f9ff;
+            border-color: #e5e7eb;
+            opacity: 0.7;
+        }
+
+        .phase.skipped {
+            background: #f9fafb;
+            border-color: #d1d5db;
+            opacity: 0.5;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        .phase-icon {
+            font-size: 2em;
+            margin-right: 20px;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .phase-content {
+            flex: 1;
+        }
+
+        .phase-name {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .phase-status {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .phase-time {
+            font-size: 0.8em;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .activity-log {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 0.85em;
+            max-height: 300px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .activity-log .line {
+            padding: 4px 0;
+            border-bottom: 1px solid #334155;
+        }
+
+        .activity-log .line:last-child {
+            border-bottom: none;
+        }
+
+        .activity-log .timestamp {
+            color: #94a3b8;
+        }
+
+        .activity-log .agent {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+
+        .activity-log .action {
+            color: #86efac;
+        }
+
+        .documents {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .document {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .document.exists {
+            background: #f0fdf4;
+            border-left-color: #86efac;
+        }
+
+        .document-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .document-size {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .footer {
+            background: #f8f9ff;
+            padding: 15px 30px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .auto-refresh {
+            display: inline-block;
+            margin-left: 10px;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #c33;
+        }
+
+        .linked-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            margin-left: 10px;
+        }
+
+        .confirmation-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .confirmation-modal.show {
+            display: flex;
+        }
+
+        .confirmation-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .confirmation-content h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .confirmation-content p {
+            margin-bottom: 20px;
+            color: #666;
+        }
+
+        .confirmation-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+
+        .btn-cancel {
+            background: #e5e7eb;
+            color: #4b5563;
+        }
+
+        .btn-cancel:hover {
+            background: #d1d5db;
+        }
+
+        .btn-delete {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #dc2626;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-buttons">
+                <a href="dashboard.html" class="header-button">← Back to Dashboard</a>
+                <button class="header-button danger" onclick="confirmDelete()">🗑️ Delete Session</button>
+            </div>
+            <h1>🏗️ Forge Session Detail</h1>
+            <div class="subtitle" id="session-subtitle">Loading session...</div>
+        </div>
+
+        <div class="content">
+            <div class="tabs" id="tabs">
+                <!-- Tabs will be dynamically inserted -->
+            </div>
+
+            <div id="tab-contents">
+                <!-- Tab contents will be dynamically inserted -->
+            </div>
+        </div>
+
+        <div class="footer">
+            <span id="session-dir"></span>
+            <span class="auto-refresh">● Auto-refreshing every 2s</span>
+            <span id="last-update"></span>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="confirmation-modal" id="delete-modal">
+        <div class="confirmation-content">
+            <h3>⚠️ Delete Session?</h3>
+            <p>This will permanently delete all session data and cannot be undone.</p>
+            <div class="confirmation-buttons">
+                <button class="btn btn-cancel" onclick="cancelDelete()">Cancel</button>
+                <button class="btn btn-delete" onclick="executeDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8765';
+        let refreshInterval;
+        let currentSessionId = null;
+        let currentProjectData = null;
+
+        // Get session ID and tab from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('id');
+        let currentActiveTab = urlParams.get('tab') || 'planner'; // Get tab from URL or default to planner
+
+        function formatTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            return date.toLocaleTimeString();
+        }
+
+        function formatDuration(start, end) {
+            if (!start || !end) return '';
+            const startDate = new Date(start);
+            const endDate = new Date(end);
+            const diff = Math.floor((endDate - startDate) / 1000);
+            const minutes = Math.floor(diff / 60);
+            const seconds = diff % 60;
+            return `${minutes}m ${seconds}s`;
+        }
+
+        function getPhaseIcon(status) {
+            switch(status) {
+                case 'complete': return '✅';
+                case 'in_progress': return '🔄';
+                case 'failed': return '❌';
+                case 'skipped': return '⊘';
+                default: return '⏳';
+            }
+        }
+
+        function renderPhase(name, displayName, data) {
+            const status = data.status || 'pending';
+            const started = data.started_at;
+            const completed = data.completed_at;
+            const duration = data.duration || formatDuration(started, completed);
+
+            let statusText = status.replace('_', ' ');
+            if (status === 'in_progress' && started) {
+                statusText += ` • Started ${formatTime(started)}`;
+            } else if ((status === 'complete' || status === 'completed') && duration) {
+                statusText += ` • ${duration}`;
+            } else if (status === 'failed' && data.last_error) {
+                statusText += ` • ${data.last_error}`;
+            }
+
+            return `
+                <div class="phase ${status}" data-phase-name="${name}">
+                    <div class="phase-icon">${getPhaseIcon(status)}</div>
+                    <div class="phase-content">
+                        <div class="phase-name">${displayName}</div>
+                        <div class="phase-status">${statusText}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPlannerContent(data, isUpdate = false) {
+            let phases = [
+                ['recon', 'Reconnaissance', data.phases?.recon],
+                ['forges', 'Dual Forgeure', data.phases?.forges],
+                ['critics', 'Critical Analysis', data.phases?.critics],
+                ['refiners', 'Refinement', data.phases?.refiners],
+                ['judge', 'Final Judgment', data.phases?.judge],
+                ['enrichment', 'Enrichment', data.phases?.enrichment]
+            ];
+
+            const logId = `${data.session_type}-${data.session_id}`;
+
+            // If updating and the content exists, just update it
+            if (isUpdate && document.getElementById('planner-content')) {
+                const existingLog = document.querySelector(`[data-log-id="${logId}"]`);
+                if (existingLog && data.recent_activity) {
+                    const wasAtBottom = isAtBottom(existingLog);
+                    const scrollTop = existingLog.scrollTop;
+
+                    const activityLines = (data.recent_activity || []).map(line => {
+                        const parts = line.match(/\[(.*?)\]\s+(\S+)\s+(.*)/);
+                        if (parts) {
+                            return `
+                                <div class="line">
+                                    <span class="timestamp">[${parts[1]}]</span>
+                                    <span class="agent">${parts[2]}</span>
+                                    <span class="action">${parts[3]}</span>
+                                </div>
+                            `;
+                        }
+                        return `<div class="line">${line}</div>`;
+                    }).join('');
+
+                    existingLog.innerHTML = activityLines;
+
+                    // Restore scroll position
+                    if (wasAtBottom) {
+                        scrollToBottom(existingLog);
+                    } else {
+                        existingLog.scrollTop = scrollTop;
+                    }
+                }
+
+                // Update phases status
+                phases.forEach(([name, display, phaseData]) => {
+                    if (phaseData) {
+                        const phaseEl = document.querySelector(`#planner-content .phase[data-phase-name="${name}"]`);
+                        if (phaseEl) {
+                            const status = phaseData.status || 'pending';
+                            phaseEl.className = `phase ${status}`;
+                            const iconEl = phaseEl.querySelector('.phase-icon');
+                            if (iconEl) iconEl.textContent = getPhaseIcon(status);
+                            const statusEl = phaseEl.querySelector('.phase-status');
+                            if (statusEl) {
+                                let statusText = status.replace('_', ' ');
+                                if (status === 'in_progress' && phaseData.started_at) {
+                                    statusText += ` • Started ${formatTime(phaseData.started_at)}`;
+                                } else if ((status === 'complete' || status === 'completed') && phaseData.duration) {
+                                    statusText += ` • ${phaseData.duration}`;
+                                }
+                                statusEl.textContent = statusText;
+                            }
+                        }
+                    }
+                });
+
+                return; // Don't re-render the whole content
+            }
+
+            // Full render for initial load
+            const activityLines = (data.recent_activity || []).map(line => {
+                const parts = line.match(/\[(.*?)\]\s+(\S+)\s+(.*)/);
+                if (parts) {
+                    return `
+                        <div class="line">
+                            <span class="timestamp">[${parts[1]}]</span>
+                            <span class="agent">${parts[2]}</span>
+                            <span class="action">${parts[3]}</span>
+                        </div>
+                    `;
+                }
+                return `<div class="line">${line}</div>`;
+            }).join('');
+
+            const documents = (data.documents || []).map(doc => `
+                <div class="document ${doc.exists ? 'exists' : ''}">
+                    <div class="document-name">${doc.exists ? '✓' : '○'} ${doc.name}</div>
+                    ${doc.size ? `<div class="document-size">${doc.size}</div>` : ''}
+                </div>
+            `).join('');
+
+            return `
+                ${data.problem_statement ? `
+                <div class="problem-statement">
+                    <strong>Problem Statement:</strong><br>
+                    ${data.problem_statement}
+                </div>
+                ` : ''}
+
+                <div class="meta-info">
+                    <div class="meta-item">
+                        <div class="label">Preset</div>
+                        <div class="value">${data.preset || 'N/A'}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="label">Fast Mode</div>
+                        <div class="value">${data.fast_mode ? 'Yes' : 'No'}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="label">Session</div>
+                        <div class="value">${data.session_id || 'N/A'}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="label">Status</div>
+                        <div class="value">${data.status || 'N/A'}</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2>Planning Phases</h2>
+                    <div class="phases">
+                        ${phases.map(([name, display, phaseData]) =>
+                            phaseData ? renderPhase(name, display, phaseData) : ''
+                        ).join('')}
+                    </div>
+                </div>
+
+                ${activityLines ? `
+                    <div class="section">
+                        <h2>Recent Activity</h2>
+                        <div class="activity-log" data-log-id="${logId}">
+                            ${activityLines}
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${documents ? `
+                    <div class="section">
+                        <h2>Generated Documents</h2>
+                        <div class="documents">
+                            ${documents}
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function renderExecutorContent(data, isUpdate = false, index = 0) {
+            const logId = `${data.session_type || 'executor'}-${data.session_id}-${index}`;
+
+            // If updating and executor content exists, just update it
+            if (isUpdate && document.getElementById(`executor-${index}-content`)) {
+                const existingLog = document.querySelector(`[data-log-id="${logId}"]`);
+                if (existingLog && data.recent_activity) {
+                    const wasAtBottom = isAtBottom(existingLog);
+                    const scrollTop = existingLog.scrollTop;
+
+                    const activityLines = (data.recent_activity || []).map(line => {
+                        return `<div class="line">${line}</div>`;
+                    }).join('');
+
+                    existingLog.innerHTML = activityLines;
+
+                    // Restore scroll position
+                    if (wasAtBottom) {
+                        scrollToBottom(existingLog);
+                    } else {
+                        existingLog.scrollTop = scrollTop;
+                    }
+                }
+
+                // Update steps/phases status
+                const phases = data.phases || data.steps || {};
+                Object.entries(phases).forEach(([name, phaseData]) => {
+                    const phaseEl = document.querySelector(`#executor-${index}-content .phase[data-phase-name="${name}"]`);
+                    if (phaseEl) {
+                        const status = phaseData.status || 'pending';
+                        phaseEl.className = `phase ${status}`;
+                        const iconEl = phaseEl.querySelector('.phase-icon');
+                        if (iconEl) iconEl.textContent = getPhaseIcon(status);
+                    }
+                });
+
+                return; // Don't re-render the whole content
+            }
+
+            // Full render for initial load
+            // Build phases from steps or parsed pipeline status
+            let phases = [];
+            if (data.phases) {
+                phases = Object.entries(data.phases).map(([name, phase]) => [
+                    name,
+                    name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    phase
+                ]);
+            } else if (data.steps) {
+                phases = Object.entries(data.steps).map(([name, step]) => [
+                    name,
+                    name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    step
+                ]);
+            }
+
+            const activityLines = (data.recent_activity || []).map(line => {
+                return `<div class="line">${line}</div>`;
+            }).join('');
+
+            return `
+                <div class="problem-statement">
+                    <strong>Repository:</strong> ${data.repo_dir?.split('/').pop() || 'Unknown'}<br>
+                    <strong>Session Type:</strong> Execution Pipeline<br>
+                    ${data.is_worktree ? '<strong>Worktree:</strong> Yes<br>' : ''}
+                    ${data.plan_file ? `<strong>Plan Source:</strong> ${data.plan_file.split('/').slice(-2).join('/')}<br>` : ''}
+                </div>
+
+                <div class="meta-info">
+                    <div class="meta-item">
+                        <div class="label">Preset</div>
+                        <div class="value">${data.preset || 'N/A'}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="label">Current Step</div>
+                        <div class="value">${data.current_step || 'N/A'}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="label">Session</div>
+                        <div class="value">${data.session_id || 'N/A'}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="label">Status</div>
+                        <div class="value">${data.status || 'N/A'}</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2>Execution Steps</h2>
+                    <div class="phases">
+                        ${phases.map(([name, display, phaseData]) =>
+                            renderPhase(name, display, phaseData || {})
+                        ).join('')}
+                    </div>
+                </div>
+
+                ${activityLines ? `
+                    <div class="section">
+                        <h2>Recent Activity</h2>
+                        <div class="activity-log" data-log-id="${logId}">
+                            ${activityLines}
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function renderTabs(projectData, isUpdate = false) {
+            // For updates, only update content if structure hasn't changed
+            if (isUpdate) {
+                const existingTabs = document.querySelectorAll('.tab').length;
+                const expectedTabs = (projectData.planner ? 1 : 0) + (projectData.executors?.length || 0);
+
+                if (existingTabs === expectedTabs) {
+                    // Update planner content if it exists
+                    if (projectData.planner) {
+                        renderPlannerContent(projectData.planner, true);
+                    }
+
+                    // Update executor content
+                    if (projectData.executors) {
+                        projectData.executors.forEach((executor, index) => {
+                            renderExecutorContent(executor, true, index);
+                        });
+                    }
+                    return; // Don't re-render tabs
+                }
+            }
+
+            // Full render of tabs
+            const tabs = [];
+            const tabContents = [];
+
+            if (projectData.planner) {
+                const hasActivity = projectData.executors && projectData.executors.length > 0;
+                const isActive = currentActiveTab === 'planner';
+                tabs.push(`
+                    <button class="tab ${isActive ? 'active' : ''}" onclick="switchTab('planner')">
+                        📋 Planning
+                        ${hasActivity ? '<span class="tab-badge">✓</span>' : ''}
+                    </button>
+                `);
+                tabContents.push(`
+                    <div id="planner-content" class="tab-content ${isActive ? 'active' : ''}">
+                        ${renderPlannerContent(projectData.planner)}
+                    </div>
+                `);
+            }
+
+            if (projectData.executors) {
+                projectData.executors.forEach((executor, index) => {
+                    const tabId = `executor-${index}`;
+                    const hasActiveStatus = executor.status === 'active';
+                    const isActiveTab = currentActiveTab === tabId;
+                    tabs.push(`
+                        <button class="tab ${isActiveTab ? 'active' : ''}" onclick="switchTab('${tabId}')">
+                            ⚙️ Execution ${index + 1}
+                            ${hasActiveStatus ? '<span class="tab-badge">●</span>' : ''}
+                        </button>
+                    `);
+                    tabContents.push(`
+                        <div id="${tabId}-content" class="tab-content ${isActiveTab ? 'active' : ''}">
+                            ${renderExecutorContent(executor)}
+                        </div>
+                    `);
+                });
+            }
+
+            document.getElementById('tabs').innerHTML = tabs.join('');
+            document.getElementById('tab-contents').innerHTML = tabContents.join('');
+        }
+
+        function switchTab(tabId) {
+            // Store current tab
+            currentActiveTab = tabId;
+
+            // Update URL with tab state
+            const url = new URL(window.location);
+            url.searchParams.set('tab', tabId);
+            window.history.replaceState({}, '', url);
+
+            // Update active tab
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // Find the tab button with the matching onclick
+            const tabButton = document.querySelector(`.tab[onclick*="${tabId}"]`);
+            if (tabButton) {
+                tabButton.classList.add('active');
+            }
+
+            const tabContent = document.getElementById(`${tabId}-content`);
+            if (tabContent) {
+                tabContent.classList.add('active');
+            }
+        }
+
+        // Track scroll positions for activity logs
+        const scrollPositions = {};
+
+        function isAtBottom(element) {
+            if (!element) return false;
+            return element.scrollHeight - element.scrollTop <= element.clientHeight + 5; // 5px tolerance
+        }
+
+        function scrollToBottom(element) {
+            if (!element) return;
+            setTimeout(() => {
+                element.scrollTop = element.scrollHeight;
+            }, 50);
+        }
+
+        async function fetchSessionDetail() {
+            if (!sessionId) {
+                document.querySelector('.content').innerHTML = `
+                    <div class="error">
+                        <strong>Error:</strong> No session ID provided<br><br>
+                        <a href="dashboard.html">Return to Dashboard</a>
+                    </div>
+                `;
+                return;
+            }
+
+            // Store scroll positions for all activity logs before update
+            document.querySelectorAll('.activity-log').forEach(log => {
+                const id = log.getAttribute('data-log-id');
+                if (id) {
+                    scrollPositions[id] = {
+                        wasAtBottom: isAtBottom(log),
+                        scrollTop: log.scrollTop
+                    };
+                }
+            });
+
+            try {
+                // First try to get it as a planner with linked executors
+                const projectResponse = await fetch(`${API_URL}/project?planner=${sessionId}`);
+                let projectData = await projectResponse.json();
+
+                // If no planner found, try as a single session
+                if (!projectData.planner) {
+                    const sessionResponse = await fetch(`${API_URL}/session/${sessionId}`);
+                    const sessionData = await sessionResponse.json();
+
+                    if (sessionData.error) {
+                        throw new Error(sessionData.error);
+                    }
+
+                    // Wrap single session in project structure
+                    if (sessionData.type === 'planner' || sessionData.session_type === 'planner') {
+                        projectData = { planner: sessionData, executors: [] };
+                    } else {
+                        projectData = { planner: null, executors: [sessionData] };
+                    }
+                }
+
+                currentProjectData = projectData;
+                currentSessionId = sessionId;
+
+                // Update header
+                const mainSession = projectData.planner || projectData.executors[0];
+                const subtitle = mainSession.problem_statement || `Session: ${sessionId}`;
+                document.getElementById('session-subtitle').innerHTML = subtitle +
+                    (projectData.linked ? '<span class="linked-badge">🔗 Linked Sessions</span>' : '');
+
+                // Check if this is an update vs initial load
+                const isUpdate = currentProjectData !== null;
+
+                // Render tabs and content
+                renderTabs(projectData, isUpdate);
+
+                // Update footer
+                document.getElementById('session-dir').textContent = mainSession.session_dir || '';
+                document.getElementById('last-update').textContent = ` • Updated: ${new Date().toLocaleTimeString()}`;
+
+                // Restore scroll positions or scroll to bottom
+                setTimeout(() => {
+                    document.querySelectorAll('.activity-log').forEach(log => {
+                        const id = log.getAttribute('data-log-id');
+                        if (id && scrollPositions[id]) {
+                            // If user was at bottom before, keep them at bottom
+                            if (scrollPositions[id].wasAtBottom) {
+                                scrollToBottom(log);
+                            } else {
+                                // Otherwise maintain their scroll position
+                                log.scrollTop = scrollPositions[id].scrollTop;
+                            }
+                        } else {
+                            // New log, scroll to bottom
+                            scrollToBottom(log);
+                        }
+                    });
+                }, 100);
+
+            } catch (error) {
+                document.querySelector('.content').innerHTML = `
+                    <div class="error">
+                        <strong>Error:</strong> ${error.message}<br><br>
+                        Make sure the server is running:<br>
+                        <code>./src/forge/dashboard/launch.sh</code><br><br>
+                        <a href="dashboard.html">Return to Dashboard</a>
+                    </div>
+                `;
+            }
+        }
+
+        function confirmDelete() {
+            document.getElementById('delete-modal').classList.add('show');
+        }
+
+        function cancelDelete() {
+            document.getElementById('delete-modal').classList.remove('show');
+        }
+
+        async function executeDelete() {
+            if (!currentSessionId) return;
+
+            try {
+                const response = await fetch(`${API_URL}/session/${currentSessionId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Session deleted successfully');
+                    window.location.href = 'dashboard.html';
+                } else {
+                    alert('Failed to delete session: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error deleting session: ' + error.message);
+            }
+
+            cancelDelete();
+        }
+
+        // Initial fetch
+        fetchSessionDetail().then(() => {
+            // Ensure all activity logs are scrolled to bottom on initial load
+            setTimeout(() => {
+                document.querySelectorAll('.activity-log').forEach(log => {
+                    scrollToBottom(log);
+                });
+            }, 200);
+        });
+
+        // Auto-refresh every 2 seconds
+        refreshInterval = setInterval(fetchSessionDetail, 2000);
+    </script>
+</body>
+</html>

@@ -2376,22 +2376,20 @@ class TestPreflightHooks:
     """Tests for _preflight_hooks startup diagnostics."""
 
     @patch("forge.executor.driver.shutil.which")
-    def test_warns_when_eslint_missing(self, mock_which, capsys):
+    def test_exits_when_eslint_missing(self, mock_which, capsys):
         mock_which.side_effect = lambda cmd: None
-        issues = _preflight_hooks()
+        with pytest.raises(SystemExit):
+            _preflight_hooks()
         out = capsys.readouterr().out
-        assert "eslint not found" in out
-        assert any("eslint" in i for i in issues)
+        assert "missing" in out.lower()
 
     @patch("forge.executor.driver.shutil.which")
-    def test_warns_when_prettier_missing(self, mock_which, capsys):
+    def test_exits_when_prettier_missing(self, mock_which, capsys):
         mock_which.side_effect = lambda cmd: "/usr/bin/eslint" if cmd == "eslint" else None
-        with patch("forge.executor.driver.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
-            issues = _preflight_hooks()
+        with pytest.raises(SystemExit):
+            _preflight_hooks()
         out = capsys.readouterr().out
-        assert "prettier not found" in out
-        assert any("prettier" in i for i in issues)
+        assert "missing" in out.lower()
 
     @patch("forge.executor.driver.shutil.which")
     def test_warns_no_eslint_config(self, mock_which, capsys):
@@ -2400,17 +2398,15 @@ class TestPreflightHooks:
             mock_run.return_value = MagicMock(
                 returncode=1, stderr="eslint.config not found"
             )
-            issues = _preflight_hooks()
+            _preflight_hooks()
         out = capsys.readouterr().out
         assert "eslint_config" in out
-        assert any("config" in i.lower() for i in issues)
 
     @patch("forge.executor.driver.shutil.which")
     def test_all_ok(self, mock_which, capsys):
         mock_which.side_effect = lambda cmd: f"/usr/bin/{cmd}"
         with patch("forge.executor.driver.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stderr="")
-            issues = _preflight_hooks()
+            _preflight_hooks()
         out = capsys.readouterr().out
         assert "eslint + prettier ready" in out
-        assert issues == []

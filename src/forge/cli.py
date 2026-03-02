@@ -17,6 +17,12 @@ def main() -> int:
     status_parser = subparsers.add_parser("status", help="Show all sessions")
     status_parser.add_argument("--active", action="store_true", help="Only show running sessions")
     status_parser.add_argument("--limit", type=int, default=20, help="Max sessions to show")
+    setup_parser = subparsers.add_parser("setup", help="Install required tools and configure environment")
+    setup_parser.add_argument("--force", action="store_true", help="Re-run setup even if already completed")
+    setup_parser.add_argument("--preset", help="Also run preset-specific setup (e.g. npm-ts)")
+    dash_parser = subparsers.add_parser("dashboard", help="Open web dashboard")
+    dash_parser.add_argument("--port", type=int, default=8765, help="Server port")
+    dash_parser.add_argument("--no-browser", action="store_true", help="Start server without opening browser")
 
     # Parse only the first arg to route to the right sub-CLI
     args, remaining = parser.parse_known_args()
@@ -39,6 +45,23 @@ def main() -> int:
     elif args.command == "status":
         from forge.core.events import cmd_status
         return cmd_status(args)
+
+    elif args.command == "setup":
+        from forge.setup import run_setup, run_preset_setup
+        try:
+            run_setup(force=args.force)
+            if args.preset:
+                from forge.executor.engine.pipeline_ops import resolve_preset_dir
+                preset_path = str(resolve_preset_dir(args.preset))
+                run_preset_setup(preset_path, force=args.force)
+            print("Setup complete.")
+        except RuntimeError as e:
+            print(f"Setup failed: {e}", file=sys.stderr)
+            return 1
+
+    elif args.command == "dashboard":
+        from forge.dashboard.commands import cmd_dashboard
+        return cmd_dashboard(args)
 
     else:
         parser.print_help()

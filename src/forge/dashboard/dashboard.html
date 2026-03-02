@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forge Multi-Session Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sessions-grid {
+            display: grid;
+            gap: 20px;
+            margin-top: 20px;
+            min-height: 400px;
+        }
+
+        .session-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .session-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 20px;
+        }
+
+        .session-title {
+            flex: 1;
+        }
+
+        .session-problem {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .session-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .session-status {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+
+        .status-planning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-executing {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-completed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-inactive {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .status-orphaned {
+            background: #fce7f3;
+            color: #831843;
+        }
+
+        .session-phases {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .phase-group {
+            flex: 1;
+            background: #f8f9ff;
+            border-radius: 8px;
+            padding: 15px;
+            pointer-events: none; /* Make phase groups non-clickable */
+            user-select: none;
+        }
+
+        .phase-group-title {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .phase-items {
+            display: grid;
+            gap: 8px;
+        }
+
+        .phase-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            transition: all 0.2s ease;
+        }
+
+        .phase-icon {
+            width: 20px;
+            text-align: center;
+        }
+
+        .phase-name {
+            flex: 1;
+        }
+
+        .phase-status {
+            font-size: 0.8em;
+            color: #999;
+        }
+
+        .phase-complete .phase-icon { color: #10b981; }
+        .phase-in_progress .phase-icon { color: #f59e0b; }
+        .phase-failed .phase-icon { color: #ef4444; }
+        .phase-pending .phase-icon { color: #9ca3af; }
+        .phase-skipped .phase-icon { color: #d1d5db; }
+
+        .no-sessions {
+            background: white;
+            border-radius: 12px;
+            padding: 60px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .no-sessions-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .no-sessions-text {
+            font-size: 1.2em;
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #c33;
+            margin: 20px 0;
+        }
+
+        .auto-refresh {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            font-size: 0.9em;
+        }
+
+        .auto-refresh.active {
+            background: #10b981;
+            color: white;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            background: #f3f4f6;
+            color: #4b5563;
+            margin-left: 5px;
+        }
+
+        .executors-list {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .executor-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 0;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .executor-icon {
+            color: #667eea;
+        }
+
+        .session-id-badge {
+            font-size: 0.75em;
+            color: #9ca3af;
+            margin-top: 5px;
+            font-family: monospace;
+        }
+
+        .delete-btn {
+            background: #fee2e2;
+            border: 1px solid #fca5a5;
+            cursor: pointer;
+            font-size: 1.1em;
+            color: #dc2626;
+            transition: all 0.2s ease;
+            padding: 5px 9px;
+            border-radius: 6px;
+            margin-left: 10px;
+        }
+
+        .delete-btn:hover {
+            background: #ef4444;
+            color: white;
+            border-color: #ef4444;
+        }
+
+        .confirmation-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .confirmation-modal.show {
+            display: flex;
+        }
+
+        .confirmation-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .confirmation-content h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .confirmation-content p {
+            margin-bottom: 20px;
+            color: #666;
+        }
+
+        .confirmation-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+
+        .btn-cancel {
+            background: #e5e7eb;
+            color: #4b5563;
+        }
+
+        .btn-cancel:hover {
+            background: #d1d5db;
+        }
+
+        .btn-delete {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #dc2626;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏗️ Forge Multi-Session Dashboard</h1>
+            <div class="stats" id="stats">
+                <div class="stat">
+                    <div class="stat-value" id="active-count">0</div>
+                    <div class="stat-label">Active Sessions</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="total-count">0</div>
+                    <div class="stat-label">Total Sessions</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="project-count">0</div>
+                    <div class="stat-label">Projects</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="sessions-container">
+            <div class="loading">Loading sessions...</div>
+        </div>
+    </div>
+
+    <div class="auto-refresh active" id="auto-refresh">
+        ● Auto-refreshing every 3s
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="confirmation-modal" id="delete-modal">
+        <div class="confirmation-content">
+            <h3>Delete Session?</h3>
+            <p>This will permanently delete all session data and cannot be undone.</p>
+            <div class="confirmation-buttons">
+                <button class="btn btn-cancel" onclick="cancelDelete()">Cancel</button>
+                <button class="btn btn-delete" onclick="executeDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8765';
+        let refreshInterval;
+        let currentSessions = {};
+        let isInitialLoad = true;
+        let pendingDeleteId = null;
+
+        function formatTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000);
+
+            if (diff < 60) return `${diff}s ago`;
+            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+            return date.toLocaleDateString();
+        }
+
+        function getPhaseIcon(status) {
+            switch(status) {
+                case 'complete': return '✅';
+                case 'in_progress': return '🔄';
+                case 'failed': return '❌';
+                case 'skipped': return '⊘';
+                default: return '⏳';
+            }
+        }
+
+        function getStepIcon(status) {
+            switch(status) {
+                case 'complete': case 'completed': return '✅';
+                case 'in_progress': case 'running': return '🔄';
+                case 'failed': return '❌';
+                default: return '⏳';
+            }
+        }
+
+        function renderPhases(phases) {
+            if (!phases) return '';
+
+            const phaseList = Object.entries(phases).map(([name, data]) => {
+                const status = data.status || 'pending';
+                return `
+                    <div class="phase-item phase-${status}" data-phase="${name}">
+                        <span class="phase-icon">${getPhaseIcon(status)}</span>
+                        <span class="phase-name">${name}</span>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="phase-group">
+                    <div class="phase-group-title">Planning Phases</div>
+                    <div class="phase-items">${phaseList}</div>
+                </div>
+            `;
+        }
+
+        function renderSteps(steps) {
+            if (!steps) return '';
+
+            const stepList = Object.entries(steps).map(([name, data]) => {
+                const status = data.status || 'pending';
+                return `
+                    <div class="phase-item phase-${status}" data-step="${name}">
+                        <span class="phase-icon">${getStepIcon(status)}</span>
+                        <span class="phase-name">${name.replace(/_/g, ' ')}</span>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="phase-group">
+                    <div class="phase-group-title">Execution Steps</div>
+                    <div class="phase-items">${stepList}</div>
+                </div>
+            `;
+        }
+
+        function renderExecutors(executors) {
+            if (!executors || executors.length === 0) return '';
+
+            const executorsList = executors.map(exec => {
+                const status = exec.status || 'inactive';
+                const step = exec.current_step || 'idle';
+                return `
+                    <div class="executor-item">
+                        <span class="executor-icon">⚙️</span>
+                        <span>${exec.session_id}</span>
+                        <span class="pill">${status}</span>
+                        <span class="pill">${step}</span>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="executors-list">
+                    <strong>Execution Sessions:</strong>
+                    ${executorsList}
+                </div>
+            `;
+        }
+
+        function showSessionDetail(sessionId) {
+            if (!sessionId) return;
+            window.location.href = `session-detail.html?id=${sessionId}`;
+        }
+
+        function updateStats(data) {
+            // Smoothly update stats with transition
+            const activeEl = document.getElementById('active-count');
+            const totalEl = document.getElementById('total-count');
+            const projectEl = document.getElementById('project-count');
+
+            if (activeEl.textContent !== String(data.total_active || 0)) {
+                activeEl.style.transform = 'scale(1.2)';
+                activeEl.textContent = data.total_active || 0;
+                setTimeout(() => activeEl.style.transform = 'scale(1)', 200);
+            }
+
+            if (totalEl.textContent !== String(data.total_sessions || 0)) {
+                totalEl.style.transform = 'scale(1.2)';
+                totalEl.textContent = data.total_sessions || 0;
+                setTimeout(() => totalEl.style.transform = 'scale(1)', 200);
+            }
+
+            if (projectEl.textContent !== String(data.projects?.length || 0)) {
+                projectEl.style.transform = 'scale(1.2)';
+                projectEl.textContent = data.projects?.length || 0;
+                setTimeout(() => projectEl.style.transform = 'scale(1)', 200);
+            }
+        }
+
+        function updateSessionCard(project, cardElement) {
+            // Update status
+            const statusEl = cardElement.querySelector('.session-status');
+            if (statusEl) {
+                const newStatus = project.overall_status || 'inactive';
+                statusEl.className = `session-status status-${newStatus}`;
+                statusEl.textContent = newStatus;
+            }
+
+            // Update time
+            const timeEl = cardElement.querySelector('.session-time');
+            if (timeEl) {
+                timeEl.textContent = `🕐 ${formatTime(project.created_at)}`;
+            }
+
+            // Update phases if they exist
+            const planner = project.planner;
+            if (planner && planner.phases) {
+                const phaseElements = cardElement.querySelectorAll('[data-phase]');
+                phaseElements.forEach(el => {
+                    const phaseName = el.getAttribute('data-phase');
+                    const phaseData = planner.phases[phaseName];
+                    if (phaseData) {
+                        const status = phaseData.status || 'pending';
+                        el.className = `phase-item phase-${status}`;
+                        el.querySelector('.phase-icon').textContent = getPhaseIcon(status);
+                    }
+                });
+            }
+
+            // Update executor steps if they exist
+            const executors = project.executors || [];
+            if (executors.length > 0) {
+                const stepElements = cardElement.querySelectorAll('[data-step]');
+                stepElements.forEach(el => {
+                    const stepName = el.getAttribute('data-step');
+                    const stepData = executors[0].steps?.[stepName];
+                    if (stepData) {
+                        const status = stepData.status || 'pending';
+                        el.className = `phase-item phase-${status}`;
+                        el.querySelector('.phase-icon').textContent = getStepIcon(status);
+                    }
+                });
+            }
+        }
+
+        function renderSessions(data) {
+            const container = document.getElementById('sessions-container');
+
+            updateStats(data);
+
+            if (!data.projects || data.projects.length === 0) {
+                if (isInitialLoad || container.querySelector('.sessions-grid')) {
+                    container.innerHTML = `
+                        <div class="no-sessions">
+                            <div class="no-sessions-icon">📭</div>
+                            <div class="no-sessions-text">No active forge sessions</div>
+                        </div>
+                    `;
+                }
+                currentSessions = {};
+                isInitialLoad = false;
+                return;
+            }
+
+            // Create session map
+            const newSessions = {};
+            data.projects.forEach(project => {
+                const sessionId = project.session_id || (project.planner ? project.planner.session_id : (project.executors[0]?.session_id || ''));
+                newSessions[sessionId] = project;
+            });
+
+            // Check if we need to do a full render (initial load or structure change)
+            const executorCountChanged = Object.keys(newSessions).some(id =>
+                id in currentSessions &&
+                (newSessions[id].executors?.length || 0) !== (currentSessions[id].executors?.length || 0)
+            );
+            const needsFullRender = isInitialLoad ||
+                                  Object.keys(newSessions).length !== Object.keys(currentSessions).length ||
+                                  !Object.keys(newSessions).every(id => id in currentSessions) ||
+                                  executorCountChanged;
+
+            if (needsFullRender) {
+                // Full render
+                const sessionsHtml = data.projects.map(project => {
+                    const status = project.overall_status || 'inactive';
+                    const planner = project.planner;
+                    const executors = project.executors || [];
+                    const sessionId = project.session_id || (planner ? planner.session_id : (executors[0]?.session_id || ''));
+
+                    return `
+                        <div class="session-card" data-session="${sessionId}" onclick="showSessionDetail('${sessionId}')">
+                            <div class="session-header">
+                                <div class="session-title">
+                                    <div class="session-problem">${project.problem_statement || 'Unknown Task'}</div>
+                                    <div class="session-meta">
+                                        <span>📁 ${project.preset || 'N/A'}</span>
+                                        <span class="session-time">🕐 ${formatTime(project.created_at)}</span>
+                                        ${project.repo_dir ? `<span>📂 ${project.repo_dir.split('/').pop()}</span>` : ''}
+                                    </div>
+                                    <div class="session-id-badge">Session: ${sessionId}</div>
+                                </div>
+                                <div style="display: flex; align-items: center;">
+                                    <div class="session-status status-${status}">${status}</div>
+                                    <button class="delete-btn" onclick="event.stopPropagation(); confirmDelete('${sessionId}')" title="Delete session">🗑️</button>
+                                </div>
+                            </div>
+
+                            <div class="session-phases">
+                                ${planner ? renderPhases(planner.phases) : ''}
+                                ${executors.length > 0 ? renderSteps(executors[0].steps) : ''}
+                            </div>
+
+                            ${renderExecutors(executors)}
+                        </div>
+                    `;
+                }).join('');
+
+                container.innerHTML = `<div class="sessions-grid">${sessionsHtml}</div>`;
+            } else {
+                // Incremental update - just update the content of existing cards
+                data.projects.forEach(project => {
+                    const sessionId = project.session_id || (project.planner ? project.planner.session_id : (project.executors[0]?.session_id || ''));
+                    const cardElement = document.querySelector(`[data-session="${sessionId}"]`);
+                    if (cardElement) {
+                        updateSessionCard(project, cardElement);
+                    }
+                });
+            }
+
+            currentSessions = newSessions;
+            isInitialLoad = false;
+        }
+
+        function confirmDelete(sessionId) {
+            pendingDeleteId = sessionId;
+            document.getElementById('delete-modal').classList.add('show');
+        }
+
+        function cancelDelete() {
+            pendingDeleteId = null;
+            document.getElementById('delete-modal').classList.remove('show');
+        }
+
+        async function executeDelete() {
+            if (!pendingDeleteId) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/session/${pendingDeleteId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    // Remove from current sessions and re-fetch
+                    delete currentSessions[pendingDeleteId];
+                    isInitialLoad = true;
+                    fetchSessions();
+                }
+            } catch (error) {
+                console.error('Error deleting session:', error);
+            }
+
+            cancelDelete();
+        }
+
+        async function fetchSessions() {
+            try {
+                const response = await fetch(`${API_BASE}/sessions`);
+                if (!response.ok) throw new Error('Failed to fetch sessions');
+                const data = await response.json();
+                renderSessions(data);
+            } catch (error) {
+                if (isInitialLoad) {
+                    const container = document.getElementById('sessions-container');
+                    container.innerHTML = `
+                        <div class="error">
+                            <strong>Error:</strong> ${error.message}<br><br>
+                            Make sure the dashboard server is running:<br>
+                            <code>./src/forge/dashboard/launch.sh</code>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Initial fetch
+        fetchSessions();
+
+        // Auto-refresh every 3 seconds
+        refreshInterval = setInterval(() => {
+            fetchSessions();
+        }, 3000);
+    </script>
+</body>
+</html>

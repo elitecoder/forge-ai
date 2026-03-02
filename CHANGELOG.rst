@@ -1,6 +1,48 @@
 Changelog
 =========
 
+0.7.2 (2026-03-02)
+-------------------
+* **``forge setup`` command**: New CLI subcommand installs required global
+  tools (eslint, prettier) via ``npm install -g``. Persists state to
+  ``~/.forge/setup.json``. Supports ``--force`` to re-run and ``--preset``
+  for preset-specific setup (e.g. Playwright dependencies).
+  ``run_preset_setup()`` reads ``setup`` entries from ``manifest.json``
+  with ``${PRESET_DIR}`` substitution and idempotent ``check`` files.
+* **Auto-run setup on first pipeline execution**: The executor driver now
+  calls ``check_setup()`` before the dispatch loop. If tools are missing,
+  ``run_setup()`` installs them automatically. Preflight hooks are now a
+  hard gate — missing eslint/prettier causes ``sys.exit(1)`` instead of
+  a warning.
+* **Stall detection in ClaudeProvider**: Tracks ``last_activity`` timestamp,
+  updated on every output line. Heartbeat thread monitors idle time and
+  kills the subprocess after 15 minutes of no output (``_STALL_TIMEOUT_S``).
+  Stall-killed processes (exit code -9) are treated as timeouts.
+* **Phase timeouts for planner**: ``PHASE_TIMEOUT_S`` dict provides per-phase
+  timeouts (900s for recon/architects, 600s for critics/refiners/judge/enrichment).
+  Passed to provider via ``timeout_s`` kwarg. Previously agents could run
+  indefinitely.
+* **Skip already-complete agents on retry**: When a planner phase retries,
+  agents whose output files already exist are skipped. Saves time and cost
+  on partial failures.
+* **Remove planner tool restrictions**: All planner agent types now run with
+  full tool access (empty ``allowed_tools``). Previously restricted to
+  Read/Write/Glob/Grep subsets which limited agent effectiveness.
+* **Null plan error handling**: ``cmd_drive`` now checks for ``None`` result
+  from the planner and exits with a clear error message instead of silently
+  printing ``Plan: None``.
+* **Multi-tier skill resolution**: New ``resolve_skill_dir()`` function in
+  ``planner/commands.py`` resolves skills via 3-tier lookup: user override
+  (``~/.claude/skills/``) > bundled in preset (``bundled-skills/``) > env
+  var fallback (``FORGE_SKILLS_BASE``). Enrichment prompts now use
+  ``{{SKILL_DIR}}`` template variable for flexible path resolution.
+* **Write-incrementally prompt fix**: Added "Write the document incrementally"
+  instruction to ``architect-topdown.md`` and ``architect-bottomup.md`` where
+  large design documents are produced. Previously only in ``judge.md``.
+* **Web dashboard**: New ``forge dashboard`` command starts an HTTP server
+  for monitoring planner/executor sessions. Supports session listing,
+  detail views, project grouping, and session deletion.
+
 0.7.1 (2026-02-24)
 -------------------
 * **Detached HEAD session naming**: ``_session_name()`` and ``session_prefix()``

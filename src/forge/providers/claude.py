@@ -29,6 +29,7 @@ NARRATION_SUFFIX = (
 )
 
 _MAX_INMEMORY_LINES = 100_000
+_STALL_TIMEOUT_S = 900  # Kill subprocess if no output for 15 minutes
 
 
 def _ts() -> str:
@@ -119,7 +120,18 @@ class ClaudeProvider:
 
         lines: list[str] = []
         line_count = 0
+        last_activity = time.monotonic()
+        activity_lock = threading.Lock()
         stop_event = threading.Event()
+
+        def _touch_activity():
+            nonlocal last_activity
+            with activity_lock:
+                last_activity = time.monotonic()
+
+        def _seconds_since_activity() -> float:
+            with activity_lock:
+                return time.monotonic() - last_activity
 
         def _reader():
             nonlocal line_count
@@ -128,6 +140,7 @@ class ClaudeProvider:
                 if not raw:
                     continue
                 line_count += 1
+                _touch_activity()
                 if raw_log_path:
                     self._write_log(raw_log_path, raw)
                 for readable in self._parse_stream_json(raw):
@@ -142,7 +155,8 @@ class ClaudeProvider:
         reader_thread.start()
 
         heartbeat_thread = self._start_heartbeat(
-            stop_event, lambda: line_count, activity_log_path, step_name,
+            stop_event, lambda: line_count, _seconds_since_activity,
+            activity_log_path, step_name, proc,
         )
 
         timed_out = False
@@ -153,6 +167,11 @@ class ClaudeProvider:
             proc.kill()
             proc.wait()
             self._log_activity(activity_log_path, step_name, f"TIMEOUT after {timeout_s}s")
+
+        # Stall-killed processes exit with -9 (SIGKILL); treat as timeout
+        if proc.returncode == -9 and not timed_out:
+            timed_out = True
+            self._log_activity(activity_log_path, step_name, "Process was stall-killed")
 
         stop_event.set()
         reader_thread.join(timeout=5)
@@ -246,11 +265,26 @@ class ClaudeProvider:
         return out
 
     def _start_heartbeat(self, stop_event: threading.Event, get_line_count,
-                         activity_log_path: str, step_name: str) -> threading.Thread:
+                         get_idle_seconds, activity_log_path: str,
+                         step_name: str, proc: subprocess.Popen) -> threading.Thread:
         def _beat():
             while not stop_event.wait(30):
                 count = get_line_count()
-                self._log_activity(activity_log_path, step_name, f"agent active ({count} lines)")
+                idle = get_idle_seconds()
+                self._log_activity(
+                    activity_log_path, step_name,
+                    f"agent active ({count} lines, idle {int(idle)}s)",
+                )
+                if idle >= _STALL_TIMEOUT_S:
+                    self._log_activity(
+                        activity_log_path, step_name,
+                        f"STALL detected: no output for {int(idle)}s, killing subprocess",
+                    )
+                    try:
+                        proc.kill()
+                    except OSError:
+                        pass
+                    return
 
         t = threading.Thread(target=_beat, daemon=True)
         t.start()

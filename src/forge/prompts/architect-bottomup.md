@@ -125,3 +125,4 @@ Implementation: Uses submitNotification() with seekTime for gapless
 - Be specific — define schemas with field types, name API endpoints, specify cache TTLs.
 - Reference the codebase brief's existing patterns. Build on what's there rather than replacing unnecessarily.
 - If the codebase brief shows weaknesses relevant to your design, address them explicitly.
+- **Write the document incrementally** — Write the first sections, then use Edit to append subsequent sections. Do NOT attempt to write the entire document in a single Write call.

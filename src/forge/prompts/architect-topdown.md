@@ -118,3 +118,4 @@ Implementation: Uses submitNotification() with seekTime for gapless
 - Be specific — name files, define interfaces, specify data shapes.
 - Reference the codebase brief's existing patterns. Reuse what works, replace what doesn't.
 - If the codebase brief shows weaknesses relevant to your design, address them explicitly.
+- **Write the document incrementally** — Write the first sections, then use Edit to append subsequent sections. Do NOT attempt to write the entire document in a single Write call.
